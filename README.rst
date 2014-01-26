@@ -42,6 +42,23 @@ So main features are:
     - Generic backups methods
     - Optional hooks at each stage of the process
 
+
+Installation
+------------
+::
+
+    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/db_smart_backup.sh
+    chmod +x db_smart_backup.sh
+
+Generate a config file::
+
+    ./db_smart_backup.sh --gen-config /path/to/config
+    vim /path/to/config
+
+Backup::
+
+    ./db_smart_backup.sh /path/to/config
+
 Changelog
 ----------
 

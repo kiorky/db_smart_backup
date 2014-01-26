@@ -6,9 +6,9 @@ __NAME__="db_smart_backup"
 
 # even if it is not really tested, we are trying to get full posix compatibility
 # and to run on another shell than bash
-if [ x"$SHELL" = "x/bin/bash" ];then
-    set -o posix
-fi
+#if [ x"$SHELL" = "x/bin/bash" ];then
+#    set -o posix &> /dev/null
+#fi
 
 generate_configuration_file() {
     cat > ${DB_SMART_BACKUP_CONFFILE} << EOF
@@ -212,7 +212,7 @@ runas() {
     bin="$1"
     shift
     args=$(quote_all "$@")
-    if [ -n "$RUNAS" ];then
+    if [ x"$RUNAS" != "x" ];then
         su $RUNAS -c "$bin $args"
     else
         "$bin" "$@"
@@ -323,7 +323,7 @@ get_backupdir() {
     dir="${TOP_BACKUPDIR}/${BACKUP_TYPE:-}"
     if [  x"${BACKUP_TYPE}" = "xpostgresql" ];then
         host="${HOST}"
-        if [ -z ${HOST} ] || [ -z ${PGHOST} ];then
+        if [ x"${HOST}" = "x" ] || [ x"${PGHOST}" = "x" ];then
             host="localhost"
         fi
         dir="$dir/$host"
@@ -544,7 +544,7 @@ do_backup() {
     die_in_error "Invalid configuration file: ${DB_SMART_BACKUP_CONFFILE}"
     do_pre_backup
     do_hook "Prebackup command output." "pre_backup_hook"
-    if [ -n "$DO_GLOBAL_BACKUP" ];then
+    if [ x"$DO_GLOBAL_BACKUP" != "x"];then
         do_global_backup
         if [ x"$?" = "x0" ];then
             do_hook "Postglobalbackup command output." "post_global_backup_hook"
@@ -577,7 +577,7 @@ mark_run_backup() {
 }
 
 set_postgresql_vars() {
-    if [ -z ${USER} ];then
+    if [ x"${USER}" = "x" ];then
         USER="postgres"
     fi
     export RUNAS="${RUNAS:-postgres}"
@@ -619,7 +619,7 @@ set_vars() {
     RED="\\033[31m"
     CYAN="\\033[36m"
     NORMAL="\\033[0m"
-    if [ -n $NO_COLORS ];then
+    if [ x"$NO_COLORS" != "x" ];then
         YELLOW=""
         RED=""
         CYAN=""
@@ -627,7 +627,7 @@ set_vars() {
     fi
     PARAM=""
     DB_SMART_BACKUP_CONFFILE_DEFAULT="/etc/db_smartbackup.conf.sh"
-    if [ -z $@ ];then
+    if [ x"$@" == "x" ];then
         USAGE="1"
     fi
     if [ -e "$@" ];then
@@ -656,12 +656,12 @@ set_vars() {
                     break
                 fi
             done
-            if [ -z "$1" ];then
+            if [ x"$1" = "x" ];then
                 break
             fi
         done
     fi
-    if [ -n ${USAGE} ];then
+    if [ x"${USAGE}" != "x" ];then
         usage
         exit 0
     fi
@@ -670,7 +670,7 @@ set_vars() {
     NO_COLOR="${NO_COLOR:-}"
     COMP=${COMP:-bzip2}
     BACKUP_TYPE=${BACKUP_TYPE:-}
-    if [ -z ${BACKUP_TYPE} ];then
+    if [ x"${BACKUP_TYPE}" = "x" ];then
         die "No backup type, choose between mysql & postgresql"
     fi
     TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/pgbackups}"
@@ -725,7 +725,7 @@ set_vars() {
 
     set_compressor
 
-    if [ -n "${BACKUP_TYPE}" ];then
+    if [ x"${BACKUP_TYPE}" != "x" ];then
         ALL_DBNAMES="$(${BACKUP_TYPE}_get_all_databases)"
         verify_backup_type
     fi
@@ -737,15 +737,15 @@ set_vars() {
 
 do_main() {
     set_vars "$@"
-    if [ -n "${GENERATE_CONFIG}" ];then
+    if [ x"${GENERATE_CONFIG}" != "x" ];then
         generate_configuration_file
         die_in_error "end_of_scripts"
-    elif [ -n ${DO_BACKUP} ];then
+    elif [ x"${DO_BACKUP}" != "x" ];then
         do_backup
         die_in_error "end_of_scripts"
     fi
 }
 
-if [ -z "${DB_SMART_BACKUP_AS_FUNCS}" ];then
+if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
     do_main "$@"
 fi
