@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # LICENSE: BSD 3 clause
 # Author: Mathieu Le Marec - Pasquet / kiorky@cryptelium.net
 
@@ -13,7 +13,8 @@ __NAME__="db_smart_backup"
 generate_configuration_file() {
     cat > ${DB_SMART_BACKUP_CONFFILE} << EOF
 
-# A script run is only for one database at a time type (mysql, postgresql)
+# A script can run only for one database type and a speific host
+# at a time (mysql, postgresql)
 # But you can run it with multiple configuration files
 # You can obiously share the same base backup directory.
 
@@ -37,9 +38,22 @@ generate_configuration_file() {
 #DO_GLOBAL_BACKUP="1"
 
 # HOW MANY BACKUPS TO KEEP & LEVEL
+# How many snapshots to keep (lastlog for dump)
+#KEEP_LASTSNAPSHOTS=24
+# How many per day
 #KEEP_DAYS=14
 #KEEP_WEEKS=8
 #KEEP_MONTHES=12
+
+# directories permission
+#DPERM="750"
+
+# directory permission
+#FPERM="640"
+
+# OWNER/GROUP
+#OWNER=root
+#GROUP=root
 
 ######## Database connection settings
 # host defaults to localhost
@@ -185,10 +199,6 @@ yellow_log(){
     echo -e "${YELLOW}[${__NAME__}] ${@}${NORMAL}" 1>&2
 }
 
-cyan_log(){
-    echo -e "${CYAN}[${__NAME__}] ${@}${NORMAL}" 1>&2
-}
-
 usage() {
     cyan_log "- Backup your databases with ease"
     yellow_log "  $0"
@@ -272,19 +282,22 @@ set_compressor() {
         fi
         # test that the binary is present
         if [ x"$c" != "xnocomp" ] && [ -e "$(which "$c")" ];then
-            log "Using compressor: ${COMP}"
             break
         else
             COMP="nocomp"
         fi
     done
-    if [ x"$c" = "xnocomp" ];then
-        log "No compressor found"
-    fi
 }
 
 comp_msg() {
     log "Compressing ${name} using ${COMP}"
+}
+
+
+cleanup_uncompressed_dump_if_ok() {
+    if [ x"$?" = x"0" ];then
+        rm -f "$name"
+    fi
 }
 
 do_compression() {
@@ -294,16 +307,15 @@ do_compression() {
     if [ x"${COMP}" = "xxz" ];then
         comp_msg
         "$XZ" --stdout -f -k -v "${name}" > "${zname}"
+        cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
-
         comp_msg
-        "$GZIP" -f -c "${name}" > "${zname}"
-        log "Backup information for ${name}"
-        "$GZIP" -l "${zname}"
+        "$GZIP" -f -c -v "${name}" > "${zname}"
+        cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
         comp_msg
-        log "Backup information for ${name}"
         "$BZIP2" -f -k -c -v "${name}" > "${zname}"
+        cleanup_uncompressed_dump_if_ok
     else
         /bin/true # noop
     fi
@@ -316,6 +328,9 @@ do_compression() {
         else
             log "Compression error"
         fi
+    fi
+    if [ x"${COMPRESSED_NAME}" != "x" ];then
+        fix_perm "${fic}"
     fi
 }
 
@@ -334,22 +349,23 @@ get_backupdir() {
 create_db_directories() {
     db="$1"
     dbdir="$(get_backupdir)/${db}"
-    dirs="$dirs $(get_backupdir)/${db}/daily"
-    dirs="$dirs $(get_backupdir)/${db}/monthly"
-    dirs="$dirs $(get_backupdir)/${db}/weekly"
-    dirs="$dirs $(get_backupdir)/${db}/dumps"
+    created="0"
     for d in\
         "$dbdir"\
         "$dbdir/weekly"\
         "$dbdir/monthly"\
         "$dbdir/dumps"\
         "$dbdir/daily"\
+        "$dbdir/lastsnapshots"\
         ;do
         if [ ! -e "$d" ];then
             mkdir -p "$d"
+            created="1"
         fi
     done
-
+    if [ x"${created}" = "x1" ];then
+        fix_perms
+    fi
 }
 
 link_into_dirs() {
@@ -357,8 +373,10 @@ link_into_dirs() {
     real_filename="$2"
     real_zfilename="$(get_compressed_name "${real_filename}")"
     daily_filename="$(get_backupdir)/${db}/daily/${db}_${YEAR}_${DOY}_${DATE}.sql"
+    lastsnapshots_filename="$(get_backupdir)/${db}/lastsnapshots/${db}_${YEAR}_${DOY}_${FDATE}.sql"
     weekly_filename="$(get_backupdir)/${db}/weekly/${db}_${YEAR}_${W}.sql"
     monthly_filename="$(get_backupdir)/${db}/monthly/${db}_${YEAR}_${MNUM}.sql"
+    lastsnapshots_zfilename="$(get_compressed_name "${lastsnapshots_filename}")"
     daily_zfilename="$(get_compressed_name "${daily_filename}")"
     weekly_zfilename="$(get_compressed_name "$weekly_filename")"
     monthly_zfilename="$(get_compressed_name "${monthly_filename}")"
@@ -370,6 +388,9 @@ link_into_dirs() {
     fi
     if [ ! -e "${monthly_zfilename}" ];then
         ln "${real_zfilename}" "${monthly_zfilename}"
+    fi
+    if [ ! -e "${lastsnapshots_zfilename}" ];then
+        ln "${real_zfilename}" "${lastsnapshots_zfilename}"
     fi
 }
 
@@ -383,9 +404,9 @@ dummy_for_tests() {
 
 do_db_backup_() {
     db="$1"
-    fun_="$2"
+    fun_="$2"                                                   ea
     create_db_directories "${db}"
-    real_filename="$(get_backupdir)/${db}/dumps/${db}_${DATE}.sql"
+    real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.sql"
     zreal_filename="$(get_compressed_name "${real_filename}")"
     $fun_ "${db}" "${real_filename}"
     do_compression "${real_filename}" "${zreal_filename}"
@@ -427,26 +448,59 @@ do_pre_backup() {
     exec 6>&1           # Link file descriptor #6 with stdout.
     exec > ${LOGFILE}     # stdout replaced with file ${LOGFILE}.
     # If backing up all DBs on the server
-    log "======================================================================"
+    log_rule
     log "DB_SMART_BACKUP by kiorky@cryptelium.net"
     log "http://www.makina-corpus.com"
     log ""
-    log "Backup of Database Server - ${PGHOST}"
-    log "======================================================================"
+    log "Backup Start Time `date`"
+    log "Backup of database server: ${BACKUP_TYPE}/${HOST}"
     # Run command before we begin
     # Test is seperate DB backups are required
-    log "Backup Start Time `date`"
-    log "======================================================================"
+    log "Backup type: ${BACKUP_TYPE}"
+    if [ x"$COMP" = "xnocomp" ];then
+        log "No compressor found"
+    else
+            log "Using compressor: ${COMP}"
+    fi
+    log_rule
 }
+
+
+fix_perm() {
+    fic="$1"
+    if [ -e "$fic" ];then
+        if [ -d "$fic" ];then
+            perm="${DPERM:-750}"
+        elif [ -f "$fic" ];then
+            perm="${FPERM:-640}"
+        fi
+        chown ${OWNER:-"root"}:${GROUP:-"root"} "${fic}"
+        chmod -f $perm "${fic}"
+    fi
+}
+
+fix_perms() {
+    find  "${TOP_BACKUPDIR}" -type d -print|\
+        while read fic
+        do
+            fix_perm "${fic}"
+        done
+    find  "${TOP_BACKUPDIR}" -type f -print|\
+        while read fic
+        do
+            fix_perm "${fic}"
+        done
+}
+
 
 do_post_backup() {
     # Run command when we're done
-    log "======================================================================"
+    log_rule
     log "Backup End Time `date`"
-    log "======================================================================"
+    log_rule
     log "Total disk space used for backup storage.."
     log "Size - Location"
-    log "`du -hs "$(get_backupdir)"`"
+    du -hs "$(get_backupdir)"/*
     log ""
     #Clean up IO redirection
     exec 1>&6 6>&-      # Restore stdout and close file descriptor #6.
@@ -472,16 +526,18 @@ get_sorted_files() {
 }
 
 do_rotate() {
+    log_rule
     log "Execute backup rotation policy"
-    log "   - keep ${KEEP_DAYS} days"
-    log "   - keep ${KEEP_WEEKS} weeks"
-    log "   - keep ${KEEP_MONTHES} monthes"
+    log "   - keep ${KEEP_LASTSNAPSHOTS} last snapshots"
+    log "   - keep ${KEEP_DAYS} daily dumps"
+    log "   - keep ${KEEP_WEEKS} weekly dumpss"
+    log "   - keep ${KEEP_MONTHES} monthly dumps"
     log ""
     # ./TOPDIR/POSTGRESQL/HOSTNAME
     ls -1d "$(get_backupdir)"/*|while read nsubdir;do
         log "   Operating in: '$nsubdir'"
         # ./TOPDIR/HOSTNAME/DBNAME/${monthly,weekly,daily,dumps}
-        for chronodir in monthly weekly daily;do
+        for chronodir in monthly weekly daily lastsnapshots;do
             subdir="${nsubdir}/${chronodir}"
             if [ -d "${subdir}" ];then
                 if [ x"${chronodir}" = "xweekly" ];then
@@ -490,6 +546,8 @@ do_rotate() {
                     to_keep=${KEEP_MONTHES}
                 elif [ x"${chronodir}" = "xdaily" ];then
                     to_keep=${KEEP_DAYS}
+                elif [ x"${chronodir}" = "xlastsnapshots" ];then
+                    to_keep=${KEEP_LASTSNAPSHOTS}
                 else
                     to_keep="65635" # int limit
                 fi
@@ -498,7 +556,7 @@ do_rotate() {
                     fic="${subdir}/${nfic}"
                     i="$(($i+1))"
                     if [ "$i" -gt "${to_keep}" ] && [ -e "${fic}" ];then
-                        log "       * Pruning ${fic}"
+                        log "       * Unliking ${fic}"
                         rm "${fic}"
                     fi
                 done
@@ -506,45 +564,50 @@ do_rotate() {
         done
     done
 }
+log_rule() {
+    log "======================================================================" 
+}
 
 do_cleanup_orphans() {
+    log_rule
+    log "Cleaning orphaned dumps:"
     # prune all files in dumps dirs which have no more any
     # hardlinks in chronoted directories (weekly, monthly, daily)
-    for dumpsdirs in "$(find "${TOP_BACKUPDIR}" -name dumps)";do
-        for fic in "$(find "$dumpsdirs" -type f -links 1)";do
-            rm -f "${fic}"
-        done
-    done
+    find "${TOP_BACKUPDIR}/${BACKUP_TYPE}" -maxdepth 3 -mindepth 3 -type d -print 2>/dev/null|\
+        while read dumpdirs
+        do
+            find "$dumpdirs" -type f -links 1 -print 2>/dev/null|\
+                while read fic
+                do
+                    log "       * Pruning ${fic}"
+                    rm -f "${fic}"
+                done
+            done
 }
 
 do_hook() {
     header="$1"
     cmd="$2"
     if [ x"$(fn_exists ${cmd})" = "x0" ];then
-        log "======================================================================"
+        log_rule
         log "${header}"
         log ""
         ${cmd}
         log ""
-        log "======================================================================"
+        log_rule
         log ""
     fi
 }
 
 do_backup() {
-    # source conf file if any
-    if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
-        . "${DB_SMART_BACKUP_CONFFILE}"
-    else
-        cyan_log "Missing configuration file: ${DB_SMART_BACKUP_CONFFILE}"
-        usage
-        exit 1
+    if [ x"${BACKUP_TYPE}" = "x" ];then
+        die "No backup type, choose between mysql & postgresql"
     fi
     # if either the source failed or we do not have a configuration file, bail out
     die_in_error "Invalid configuration file: ${DB_SMART_BACKUP_CONFFILE}"
     do_pre_backup
     do_hook "Prebackup command output." "pre_backup_hook"
-    if [ x"$DO_GLOBAL_BACKUP" != "x"];then
+    if [ x"${DO_GLOBAL_BACKUP}" != "x" ];then
         do_global_backup
         if [ x"$?" = "x0" ];then
             do_hook "Postglobalbackup command output." "post_global_backup_hook"
@@ -562,12 +625,13 @@ do_backup() {
     done
     do_rotate
     do_hook "Postrotate command output." "post_rotate_hook"
-    cleanup_orphans
+    do_cleanup_orphans
     do_hook "Postcleanup command output." "post_cleanup_hook"
     do_hook "Postbackup command output." "post_backup_hook"
     do_post_backup
     do_sendmail
     do_hook "Postmail command output." "post_mail_hook"
+    fix_perms
     eval rm -f "${LOGFILE}"
 }
 
@@ -627,10 +691,11 @@ set_vars() {
     fi
     PARAM=""
     DB_SMART_BACKUP_CONFFILE_DEFAULT="/etc/db_smartbackup.conf.sh"
-    if [ x"$@" == "x" ];then
+    parsable_args="$(echo "$@"|sed "s/^--//g")"
+    if [ x"${parsable_args}" = "x" ];then
         USAGE="1"
     fi
-    if [ -e "$@" ];then
+    if [ -e "${parsable_args}" ];then
         mark_run_backup $1
     else
         while true
@@ -641,12 +706,15 @@ set_vars() {
             fi
             if [ x"$1" = "x--gen-config" ];then
                 GENERATE_CONFIG="1"
-                DB_SMART_BACKUP_CONFFILE="${2:-${DB_SMART_BACKUP_CONFFILE}_DEFAULT}"
+                DB_SMART_BACKUP_CONFFILE="${2:-${DB_SMART_BACKUP_CONFFILE_DEFAULT}}"
                 sh="2"
             elif [ x"$1" = "x-b" ] || [ x"$1" = "x--backup" ];then
                 mark_run_backup $2;sh="2"
             else
-                USAGE="1"
+                if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
+                    usage
+                    die "Invalid invocation"
+                fi
             fi
             PARAM="$1"
             OLD_ARG="$1"
@@ -661,23 +729,21 @@ set_vars() {
             fi
         done
     fi
-    if [ x"${USAGE}" != "x" ];then
-        usage
-        exit 0
-    fi
 
     ######## Backup settings
     NO_COLOR="${NO_COLOR:-}"
-    COMP=${COMP:-bzip2}
+    COMP=${COMP:-xz}
     BACKUP_TYPE=${BACKUP_TYPE:-}
-    if [ x"${BACKUP_TYPE}" = "x" ];then
-        die "No backup type, choose between mysql & postgresql"
-    fi
     TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/pgbackups}"
     DO_GLOBAL_BACKUP="1"
+    KEEP_LASTSNAPSHOTS="${NB_DAILY:-24}"
     KEEP_DAYS="${NB_DAILY:-14}"
     KEEP_WEEKS="${NB_WEEKLY:-8}"
     KEEP_MONTHES="${NB_MONTHLY:-12}"
+    DPERM="${DPERM:-"750"}"
+    FPERM="${FPERM:-"640"}"
+    OWNER="${OWNER:-"root"}"
+    GROUP="${GROUP:-"root"}"
 
     ######## Database connection settings
     HOST="${HOST:-localhost}"
@@ -712,6 +778,7 @@ set_vars() {
     GLOBAL_SUBDIR="__GLOBAL__"
     PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     DATE=`date +%Y-%m-%d` # Datestamp e.g 2002-09-21
+    FDATE=`date +%Y-%m-%d_%H-%M-%S` # Datestamp e.g 2002-09-21
     DOY=`date +%j`  # Day of the YEAR 0..366
     DOW=`date +%A`  # Day of the week e.g. Monday
     DNOW=`date +%u` # Day number of the week 1 to 7 where 1 represents Monday
@@ -733,16 +800,28 @@ set_vars() {
     if [ x"${BACKUP_TYPE}" = "xpostgresql" ] && [ x"${BACKUP_TYPE}" = "xmysql" ];then
         "set_${BACKUP_TYPE}_vars"
     fi
+    # source conf file if any
+    if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
+        . "${DB_SMART_BACKUP_CONFFILE}"
+    fi
 }
 
 do_main() {
     set_vars "$@"
-    if [ x"${GENERATE_CONFIG}" != "x" ];then
+    if [ x"${USAGE}" != "x" ];then
+        usage
+        exit 0
+    elif [ x"${GENERATE_CONFIG}" != "x" ];then
         generate_configuration_file
         die_in_error "end_of_scripts"
     elif [ x"${DO_BACKUP}" != "x" ];then
-        do_backup
-        die_in_error "end_of_scripts"
+        if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
+            do_backup
+            die_in_error "end_of_scripts"
+        else
+            cyan_log "Missing or invalid configuration file: ${DB_SMART_BACKUP_CONFFILE}"
+            exit 1
+        fi
     fi
 }
 

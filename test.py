@@ -144,9 +144,7 @@ COMP="xz" COMPS="xz"        XZ=""     ;set_compressor;echo comp:$COMP;
 '''
         ret = self.exec_script(TEST, stderr=True)
         self.assertEqual(
-            '[db_smart_backup] No compressor found\n'
             'comp:nocomp\n'
-            '[db_smart_backup] Using compressor: xz\n'
             'comp:xz\n', ret)
         TEST = '''
 COMP=""      COMPS="bzip2 nocomp" BZIP2="/null";set_compressor;echo comp:$COMP;
@@ -154,9 +152,7 @@ COMP="bzip2" COMPS="bzip2"        BZIP2=""     ;set_compressor;echo comp:$COMP;
 '''
         ret = self.exec_script(TEST, stderr=True)
         self.assertEqual(
-            '[db_smart_backup] No compressor found\n'
             'comp:nocomp\n'
-            '[db_smart_backup] Using compressor: bzip2\n'
             'comp:bzip2\n', ret)
         TEST = '''
 COMP=""     COMPS="gzip nocomp" GZIP="/null";set_compressor;echo comp:$COMP;
@@ -164,9 +160,7 @@ COMP="gzip" COMPS="gzip"        GZIP=""     ;set_compressor;echo comp:$COMP;
 '''
         ret = self.exec_script(TEST, stderr=True)
         self.assertEqual(
-            '[db_smart_backup] No compressor found\n'
             'comp:nocomp\n'
-            '[db_smart_backup] Using compressor: gzip\n'
             'comp:gzip\n', ret)
         TEST = '''
 COMP="xz"
@@ -176,7 +170,6 @@ set_compressor;echo comp:$COMP;
 '''
         ret = self.exec_script(TEST, stderr=True)
         self.assertEqual(
-            '[db_smart_backup] No compressor found\n'
             'comp:nocomp\n', ret)
 
     def test_Compression(self):
@@ -203,7 +196,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Using compressor: xz',
             '\[db_smart_backup\] Compressing thiscompress',
             'thiscompress: .* B / .* B = .*',
             '^thiscompress.xz.*$',
@@ -217,9 +209,7 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Using compressor: gzip',
             '\[db_smart_backup\] Compressing thiscompress',
-            'compressed.*ratio.*uncompressed_name',
             '^thiscompress.gz.*$',
         ]:
             self.assertTrue(re.search(i, ret, re.M | re.U), i)
@@ -231,7 +221,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Using compressor: bzip2',
             '\[db_smart_backup\] Compressing thiscompress',
             'thiscompress:.*%.*out',
             '^thiscompress.bz2.*$',
@@ -245,7 +234,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] No compressor found',
             '\[db_smart_backup\] No compressor found, no compression done',
             'thiscompress',
         ]:
@@ -346,6 +334,73 @@ DB=foo;YEAR="2002";MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" 
         ]:
             self.assertTrue(os.path.exists(J(self.dir, 'pgbackups', i)), i)
 
+    def test_cleanup_orphans_1(self):
+        common = u'''
+BACKUPDIR="$outputDir/pgbackups"
+KEEP_MONTHES=1
+KEEP_WEEKS=3
+KEEP_DAYS=9
+DB=foo
+YEAR=2002
+'''
+        RTEST1 = common + u'''
+DB="WITH QUOTES é utf8"
+find "$(get_backupdir)/$DB/"{{daily,monthly,lastsnapshots,weekly}}/ -type f|\
+while read fic;do rm -f "${{fic}}";done
+do_cleanup_orphans 2>&1
+'''
+        TEST = common + u'''
+DB="WITH QUOTES é utf8"
+MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";
+DOY="0$DOM";W="2"
+FDATE="${{DATE}}_01-02-03";dofic
+'''
+        # removing file from all subdirs except dump place
+        self.exec_script(TEST)
+        ret = self.exec_script(RTEST1)
+        self.assertTrue(
+            re.search(
+                'Pruning .*/pgbackups/postgresql/localhost/'
+                'WITH QUOTES é utf8/dumps/'
+                'WITH QUOTES é utf8_2002-01-08.sql',
+                ret
+            )
+        )
+
+    def test_cleanup_orphans_2(self):
+        common = u'''
+BACKUPDIR="$outputDir/pgbackups"
+KEEP_MONTHES=1
+KEEP_WEEKS=3
+KEEP_DAYS=9
+DB=foo
+YEAR=2002
+'''
+        RTEST2 = common + u'''
+DB="WITH QUOTES é utf8"
+find "$(get_backupdir)/$DB/"{{dumps,daily,monthly,weekly}} -type f|\
+while read fic;do rm -f "${{fic}}";done
+do_cleanup_orphans 2>&1
+'''
+        TEST = common + u'''
+DB="WITH QUOTES é utf8"
+MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";
+DOY="0$DOM";W="2"
+FDATE="${{DATE}}_01-02-03";dofic
+'''
+        # removing file from dumps + all-one dir
+        # and test than orphan cleanup the last bits
+        self.exec_script(TEST)
+        ret = self.exec_script(RTEST2)
+        self.assertTrue(
+            re.search(
+                'Pruning .*/pgbackups/postgresql/localhost/'
+                'WITH QUOTES é utf8/lastsnapshots/'
+                'WITH QUOTES é utf8_2002_008_2002-01-08_01-02-03.sql.xz',
+                ret
+            )
+        )
+
     def test_rotate(self):
         rotatec = u'''
 BACKUPDIR="$outputDir/pgbackups"
@@ -360,48 +415,48 @@ do_rotate 2>&1
 '''
         TEST = rotatec + u'''
 DB="WITH QUOTES é utf8"
-MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";DOY="60"   ;W="8" dofic
+MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"   ;W="8" dofic
 DB=__GLOBAL__
-MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";DOY="60"   ;W="8" dofic
+MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"   ;W="8" dofic
 DB=bar
-MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="2" dofic
-MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="3" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";DOY="0$DOM";W="5" dofic
-MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";DOY="60"   ;W="8" dofic
+MNUM="01";DOM="08";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="09";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="10";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="11";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="12";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="13";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="14";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="2" dofic
+MNUM="01";DOM="15";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="16";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="3" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="01";DOM="17";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="0$DOM";W="5" dofic
+MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"   ;W="8" dofic
 '''
         self.exec_script(TEST)
         counters = {
-            '': 39,
+            '': 50,
             'daily': 11,
             'monthly': 2,
             'weekly': 4,
@@ -419,7 +474,7 @@ MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";DOY="60"   ;W="8" dofic
                                 "{2}: {0} != {1}".format(j, ret, counter))
         ret = self.exec_script(RTEST, no_rotate=False)
         counters = {
-            '': 35,
+            '': 46,
             'daily': 9,
             'monthly': 1,
             'weekly': 3,
