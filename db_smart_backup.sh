@@ -455,7 +455,7 @@ do_global_backup() {
 do_sendmail() {
     debug "do_sendmail"
     if [ x"${DISABLE_MAIL}" = "x" ]; then
-        cat "${DSB_LOGFILE}" | mail -s "${__NAME__}  Backup Log for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
+        cat "${DSB_LOGFILE}" | mail -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
     fi
 }
 
@@ -489,9 +489,9 @@ do_pre_backup() {
     fi
     # If backing up all DBs on the server
     log_rule
-    log "DB_SMART_BACKUP by kiorky@cryptelium.net"
-    log "http://www.makina-corpus.com"
-    log "Log: ${DSB_LOGFILE}"
+    log "DB_SMART_BACKUP by kiorky@cryptelium.net / http://www.makina-corpus.com"
+    log "Conf: ${YELLOW}'${DSB_CONF_FILE}'"
+    log "Log: ${YELLOW}'${DSB_LOGFILE}'"
     log "Backup Start Time: ${YELLOW}$(readable_date)${NORMAL}"
     log "Backup of database compression://type@server: ${YELLOW}${comp_msg}://${BACKUP_TYPE}@${HOST}${NORMAL}"
     log_rule
@@ -863,6 +863,10 @@ set_vars() {
     MYSQLDUMP_LOCKTABLES="${MYSQLDUMP_LOCKTABLES:-}"
     MYSQLDUMP_DEBUG="${MYSQLDUMP_DEBUG:-}"
     MYSQLDUMP_NOROUTINES="${MYSQLDUMP_NOROUTINES:-}"
+
+    ######## Mails
+    DISABLE_MAIL="${DISABLE_MAIL:-}"
+    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-`hostname -f`}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"
