@@ -196,8 +196,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Compressing thiscompress',
-            'thiscompress: .* B / .* B = .*',
             '^thiscompress.xz.*$',
         ]:
             self.assertTrue(re.search(i, ret, re.M | re.U), i)
@@ -209,7 +207,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Compressing thiscompress',
             '^thiscompress.gz.*$',
         ]:
             self.assertTrue(re.search(i, ret, re.M | re.U), i)
@@ -221,8 +218,6 @@ echo $COMPRESSED_NAME
 '''
         ret = self.exec_script(TEST, stderr=True, no_compress=False)
         for i in [
-            '\[db_smart_backup\] Compressing thiscompress',
-            'thiscompress:.*%.*out',
             '^thiscompress.bz2.*$',
         ]:
             self.assertTrue(re.search(i, ret, re.M | re.U), i)
@@ -309,7 +304,7 @@ create_db_directories foo
             self.assertTrue(
                 os.path.isdir(J(self.dir, "pgbackups", i)), i)
 
-    def test_bacKdir(self):
+    def test_backdir(self):
         TEST = '''
 echo $(TOP_BACKUPDIR="foo" BACKUP_TYPE=bar HOST="" PGHOST="" get_backupdir)
 echo $(TOP_BACKUPDIR="foo" BACKUP_TYPE=postgresql PGHOST="" get_backupdir)
@@ -370,6 +365,8 @@ FDATE="${{DATE}}_01-02-03";dofic
     def test_cleanup_orphans_2(self):
         common = u'''
 BACKUPDIR="$outputDir/pgbackups"
+KEEP_LOGS=1
+KEEP_LASTS=24
 KEEP_MONTHES=1
 KEEP_WEEKS=3
 KEEP_DAYS=9
@@ -461,9 +458,12 @@ MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"  
             'monthly': 2,
             'weekly': 4,
             'dumps': 22,
+            'lastsnapshots': 11,
+
         }
         for i in ['__GLOBAL__', 'bar', u"WITH QUOTES é utf8"]:
-            for j in ['', 'daily', 'weekly', 'monthly', 'dumps']:
+            for j in ['', 'daily', 'weekly', 'monthly',
+                      'dumps', 'lastsnapshots']:
                 cmd = (
                     u"find '{0}/pgbackups/postgresql/localhost/{1}/{2}' "
                     u"-type f 2>/dev/null"
@@ -471,17 +471,20 @@ MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"  
                 ret = self.exec_script(cmd)
                 counter = counters.get(j)
                 self.assertTrue(int(ret.strip()) == counter,
-                                "{2}: {0} != {1}".format(j, ret, counter))
+                                u"{3} {0}: {2} != {1}".format(
+                                    j, ret, counter, i))
         ret = self.exec_script(RTEST, no_rotate=False)
         counters = {
-            '': 46,
+            '': 37,
             'daily': 9,
             'monthly': 1,
             'weekly': 3,
             'dumps': 22,
+            'lastsnapshots': 2,
         }
         for i in ['__GLOBAL__', 'bar', u"WITH QUOTES é utf8"]:
-            for j in ['', 'daily', 'weekly', 'monthly', 'dumps']:
+            for j in ['', 'daily', 'weekly', 'monthly',
+                      'dumps', 'lastsnapshots']:
                 cmd = (
                     u"find '{0}/pgbackups/postgresql/localhost/{1}/{2}' "
                     u"-type f 2>/dev/null"
@@ -489,7 +492,8 @@ MNUM="03";DOM="01";DATE="$YEAR-$MNUM-$DOM";FDATE="${{DATE}}_01-01-01";DOY="60"  
                 ret = self.exec_script(cmd)
                 counter = counters.get(j)
                 self.assertTrue(int(ret.strip()) == counter,
-                                "{2}: {0} != {1}".format(j, ret, counter))
+                                u"{3} {0}: {2} != {1}".format(
+                                    j, ret, counter, i))
 
 
 
@@ -582,6 +586,27 @@ get_sorted_files testtest
             )
         )
 
+    def test_asanitize(self):
+        TEST = u'''
+# monthly
+cd "{dir}"
+set_vars
+activate_IO_redirection
+cyan_log "foo"
+yellow_log "foo"
+log "foo"
+deactivate_IO_redirection
+sanitize_log
+cat -e "$DSB_LOGFILE"
+'''
+        ret = self.exec_script(TEST)
+        self.assertEqual(
+            ret.splitlines()[-3:],
+            ['foo$',
+             '[db_smart_backup] foo$',
+             '[db_smart_backup] foo$']
+        )
+
     def test_sort4(self):
         TEST = u'''
 # monthly
@@ -607,7 +632,6 @@ get_sorted_files testtest
                 'foo_2001_01.sql\n'
             )
         )
-
 
 
 if __name__ == '__main__':

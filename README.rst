@@ -121,24 +121,35 @@ Backup types
 -------------
 PostGRESQL specificities
 ++++++++++++++++++++++++
-- We use environment variables to set the host, port, password and user to set at backup
+- We use traditionnal postgresql environment variables to set the host, port, password and user to set at backup
   time
 
-Add another one
+Add another backup type
 +++++++++++++++++++++
-You need to add:
+You need to first read the implementations for **mysql** and **postgresql**, those are
+really simple, then follow the next guide (you do not need to make the script
+call your functions, they are introspected):
 
-    - Add a function "yourtype_check_connectivity" that exit in error if the
-      connexion is not possible
-    - Add a function "yourtype_get_all_databases" that return a space separated
+    - Add a function **yourtype_set_connection_vars** to set any neccesary extra global variable needed
+      at the connect phase to your service
+    - Add a function **yourtype_check_connectivity** that exit in error if the
+      connexion is not possible and die in error else (use the **die_in_error**
+      function)
+    - Add a function **yourtype_set_vars** to set any neccesary extra global variable needed
+      to handle your service
+    - Add a function **yourtype_get_all_databases** that return a space separated
       list of your database dbs.
-    - Add 2 functions "yourtype_dump" and "yourtype_dumpall" even if one of them
+    - Add a function **yourtype_dump** that will dump a database to a file, or a
+      stub returning 0 as $? (call **/bin/true**) if it is not relevant for your
+      backup type.
+    - Add a function **yourtype_dumpall** even if one of them
       is just an empty stub, the script will then introspect itself to find
-      them.
+      them. Those functions must set the **LAST_BACKUP_STATUS** either to **""**
+      on sucess or **"failure"** if the backup failed.
     - Add what is needed to load the configuration in the default configuration
-      file in the generate_configuration_file method
-    - Hack the defaults and variables in set_vars, the same way.
-
+      file in the **generate_configuration_file** method
+    - Hack the defaults and variables in **set_vars**, the same way, if
+      neccessary.
 
 Hooks
 ---------

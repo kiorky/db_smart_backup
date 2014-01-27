@@ -11,7 +11,7 @@ __NAME__="db_smart_backup"
 #fi
 
 generate_configuration_file() {
-    cat > ${DB_SMART_BACKUP_CONFFILE} << EOF
+    cat > ${DSB_CONF_FILE} << EOF
 
 # A script can run only for one database type and a speific host
 # at a time (mysql, postgresql)
@@ -42,9 +42,11 @@ generate_configuration_file() {
 # How many snapshots to keep (lastlog for dump)
 #KEEP_LASTSNAPSHOTS=24
 # How many per day
+#KEEP_LAST=24
 #KEEP_DAYS=14
 #KEEP_WEEKS=8
 #KEEP_MONTHES=12
+#KEEP_LOGS=60
 
 # directories permission
 #DPERM="750"
@@ -58,7 +60,7 @@ generate_configuration_file() {
 
 ######## Database connection settings
 # host defaults to localhost
-# and without port we use a connexion via socket
+# and without port we use a connection via socket
 #HOST=""
 #PORT=""
 
@@ -158,12 +160,16 @@ EOF
 }
 
 fn_exists() {
-    echo $(LC_ALL=C LANG=C type $1 2>&1 | head -n1 | grep -q "is a function";echo $?)
+    echo $(LC_ALL=C LANG=C type ${1} 2>&1 | head -n1 | grep -q "is a function";echo $?)
 }
 
 
+print_name() {
+    echo -e "[${__NAME__}]"
+}
+
 log() {
-    echo -e "${RED}[${__NAME__}] ${@}${NORMAL}" 1>&2
+    echo -e "${RED}$(print_name) ${@}${NORMAL}" 1>&2
 }
 
 cyan_log() {
@@ -171,19 +177,19 @@ cyan_log() {
 }
 
 die_() {
-    ret="$1"
+    ret="${1}"
     shift
-    cyan_log "$@"
-    do_hook "FAILURE command output." "failure_hook"
+    cyan_log "ABRUPT PROGRAM TERMINATION: ${@}"
+    do_hook "FAILURE command output" "failure_hook"
     exit ${ret}
 }
 
 die() {
-    die_ 1 "$@"
+    die_ 1 "${@}"
 }
 
 die_in_error_() {
-    ret="$1"
+    ret="${1}"
     shift
     msg="${@:-"${ERROR_MSG}"}"
     if [ x"${ret}" != "x0" ];then
@@ -192,11 +198,21 @@ die_in_error_() {
 }
 
 die_in_error() {
-    die_in_error_ "$?" "$@"
+    die_in_error_ "$?" "${@}"
 }
 
 yellow_log(){
-    echo -e "${YELLOW}[${__NAME__}] ${@}${NORMAL}" 1>&2
+    echo -e "${YELLOW}$(print_name) ${@}${NORMAL}" 1>&2
+}
+
+readable_date() {
+    date +"%Y-%m-%d %H:%M:%S.%N"
+}
+
+debug() {
+    if [ x"${DSB_DEBUG}" != "x" ];then
+        yellow_log "DEBUG $(readable_date): $@"
+    fi
 }
 
 usage() {
@@ -206,22 +222,22 @@ usage() {
     yellow_log "        alias to --backup"
     yellow_log "     -b|--backup /path/toconfig:"
     yellow_log "        backup databases"
-    yellow_log "     --gen-config [/path/toconfig (default: ${DB_SMART_BACKUP_CONFFILE}_DEFAULT)]"
+    yellow_log "     --gen-config [/path/toconfig (default: ${DSB_CONF_FILE}_DEFAULT)]"
     yellow_log "        generate a new config file]"
 }
 
 quote_all() {
     cmd=""
-    for i in "$@";do
-        cmd="${cmd} \"$(echo "$i"|sed "s/\"/\"\'\"/g")\""
+    for i in "${@}";do
+        cmd="${cmd} \"$(echo "${i}"|sed "s/\"/\"\'\"/g")\""
     done
     echo "${cmd}"
 }
 
 runas() {
-    bin="$1"
+    bin="${1}"
     shift
-    args=$(quote_all "$@")
+    args=$(quote_all "${@}")
     if [ x"$RUNAS" != "x" ];then
         su ${RUNAS} -c "${bin} ${args}"
     else
@@ -233,13 +249,13 @@ runas() {
 
 get_compressed_name() {
     if [ x"${COMP}" = "xxz" ];then
-        echo "$1.xz";
+        echo "${1}.xz";
     elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
-        echo "$1.gz";
+        echo "${1}.gz";
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
-        echo "$1.bz2";
+        echo "${1}.bz2";
     else
-        echo "$1";
+        echo "${1}";
     fi
 }
 
@@ -251,10 +267,10 @@ set_compressor() {
             c="${XZ}"
         elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
             GZIP="${GZIP:-gzip}"
-            c="$GZIP"
+            c="${GZIP}"
         elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
             BZIP2="${BZIP2:-bzip2}"
-            c="$BZIP2"
+            c="${BZIP2}"
         else
             c="nocomp"
         fi
@@ -268,11 +284,16 @@ set_compressor() {
 }
 
 comp_msg() {
-    log "Compressing ${name} using ${COMP}"
+    sz="$(du -sh "$zname"|awk '{print $1}') "
+    s1="$(du -sb "$zname"|awk '{print $1}')"
+    s2="$(du -sb "$name"|awk '{print $1}')"
+    ratio=$(echo "$s1" "${s2}" | awk '{printf "%.2f \n", $1/$2}')
+    log "${RED}${NORMAL}${YELLOW} ${COMP}${NORMAL}${RED} -> ${YELLOW}${zname}${NORMAL} ${RED}(${NORMAL}${YELLOW} ${sz} ${NORMAL}${RED}/${NORMAL} ${YELLOW}${ratio}${NORMAL}${RED})${NORMAL}"
 }
 
 
 cleanup_uncompressed_dump_if_ok() {
+    comp_msg
     if [ x"$?" = x"0" ];then
         rm -f "$name"
     fi
@@ -280,19 +301,16 @@ cleanup_uncompressed_dump_if_ok() {
 
 do_compression() {
     COMPRESSED_NAME=""
-    name="$1"
-    zname="${2:-$(get_compressed_name $1)}"
+    name="${1}"
+    zname="${2:-$(get_compressed_name ${1})}"
     if [ x"${COMP}" = "xxz" ];then
-        comp_msg
-        "$XZ" --stdout -f -k -v "${name}" > "${zname}"
+        "${XZ}" --stdout -f -k "${name}" > "${zname}"
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
-        comp_msg
-        "$GZIP" -f -c -v "${name}" > "${zname}"
+        "${GZIP}" -f -c "${name}" > "${zname}"
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
-        comp_msg
-        "$BZIP2" -f -k -c -v "${name}" > "${zname}"
+        "${BZIP2}" -f -k -c "${name}" > "${zname}"
         cleanup_uncompressed_dump_if_ok
     else
         /bin/true # noop
@@ -325,7 +343,7 @@ get_backupdir() {
 }
 
 create_db_directories() {
-    db="$1"
+    db="${1}"
     dbdir="$(get_backupdir)/${db}"
     created="0"
     for d in\
@@ -347,8 +365,8 @@ create_db_directories() {
 }
 
 link_into_dirs() {
-    db="$1"
-    real_filename="$2"
+    db="${1}"
+    real_filename="${2}"
     real_zfilename="$(get_compressed_name "${real_filename}")"
     daily_filename="$(get_backupdir)/${db}/daily/${db}_${YEAR}_${DOY}_${DATE}.sql"
     lastsnapshots_filename="$(get_backupdir)/${db}/lastsnapshots/${db}_${YEAR}_${DOY}_${FDATE}.sql"
@@ -382,15 +400,20 @@ dummy_for_tests() {
 
 do_db_backup_() {
     LAST_BACKUP_STATUS=""
-    db="$1"
-    fun_="$2"
+    db="${1}"
+    fun_="${2}"
     create_db_directories "${db}"
     real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.sql"
     zreal_filename="$(get_compressed_name "${real_filename}")"
+    adb="${YELLOW}${db}${NORMAL} "
+    if [ x"${db}" = x"${GLOBAL_SUBDIR}" ];then
+        adb=""
+    fi
+    log "Dumping database ${adb}${RED}to maybe uncompressed dump: ${YELLOW}${real_filename}${NORMAL}"
     $fun_ "${db}" "${real_filename}"
     if [ x"$?" != "x0" ];then
         LAST_BACKUP_STATUS="failure"
-        log "${CYAN}Backup of ${db} failed${NORMAL}"
+        log "${CYAN}    Backup of ${db} failed !!!${NORMAL}"
     else
         do_compression "${real_filename}" "${zreal_filename}"
         link_into_dirs "${db}" "${real_filename}"
@@ -398,7 +421,7 @@ do_db_backup_() {
 }
 
 do_db_backup() {
-    db="`echo $1 | sed 's/%/ /g'`"
+    db="`echo ${1} | sed 's/%/ /g'`"
     fun_="${BACKUP_TYPE}_dump"
     do_db_backup_ "${db}" "$fun_"
 }
@@ -406,56 +429,73 @@ do_db_backup() {
 do_global_backup() {
     db="$GLOBAL_SUBDIR"
     fun_="${BACKUP_TYPE}_dumpall"
+    log_rule
+    log "GLOBAL BACKUP"
+    log_rule
     do_db_backup_ "${db}" "$fun_"
 }
 
 do_sendmail() {
+    debug "do_sendmail"
     if [ x"${MAILCONTENT}" = "xfiles" ]; then
         #Get backup size
-        ATTSIZE=`du -c ${BACKUPFILES} | grep "[[:digit:][:space:]]total$" |sed s/\s*total//`
+        ATTSIZE=`du -c ${DSB_BACKUPFILES} | grep "[[:digit:][:space:]]total$" |sed s/\s*total//`
         if [ ${MAXATTSIZE} -ge ${ATTSIZE} ];then
-            BACKUPFILES=`log "${BACKUPFILES}" | sed -e "s# # -a #g"`    #enable multiple attachments
-            mutt -s "PostgreSQL Backup Log and SQL Files for ${PGHOST} - ${DATE}" ${BACKUPFILES} ${MAILADDR} < ${LOGFILE}        #send via mutt
+            DSB_BACKUPFILES=`log "${DSB_BACKUPFILES}" | sed -e "s# # -a #g"`    #enable multiple attachments
+            mutt -s "PostgreSQL Backup Log and SQL Files for ${PGHOST} - ${DATE}" ${DSB_BACKUPFILES} ${MAILADDR} < ${DSB_LOGFILE}        #send via mutt
         else
-            cat "${LOGFILE}" | mail -s "WARNING! - PostgreSQL Backup exceeds set maximum attachment size on ${PGHOST} - ${DATE}" ${MAILADDR}
+            cat "${DSB_LOGFILE}" | mail -s "WARNING! - PostgreSQL Backup exceeds set maximum attachment size on ${PGHOST} - ${DATE}" ${MAILADDR}
         fi
     elif [ x"${MAILCONTENT}" = "xlog" ];then
-        cat "${LOGFILE}" | mail -s "PostgreSQL Backup Log for ${MAIL_THISSERVERNAME} - ${DATE}" ${MAILADDR}
-    else
-        cat "${LOGFILE}"
+        cat "${DSB_LOGFILE}" | mail -s "PostgreSQL Backup Log for ${MAIL_THISSERVERNAME} - ${DATE}" ${MAILADDR}
+    fi
+}
+
+activate_IO_redirection() {
+    if [ x"${DSB_ACTITED_RIO}" = x"" ];then
+        DSB_ACTITED_RIO="1"
+        if [ ! -e "${DSB_LOGDIR}" ];then
+            mkdir -p "${DSB_LOGDIR}"
+        fi
+        touch "${DSB_LOGFILE}"
+        exec 1> >(tee -a "${DSB_LOGFILE}") 2>&1
+    fi
+}
+
+
+deactivate_IO_redirection() {
+    if [ x"${DSB_ACTITED_RIO}" != x"" ];then
+        DSB_ACTITED_RIO=""
+        exec 1>&1  # Restore stdout and close file descriptor #6.
+        exec 2>&2  # Restore stdout and close file descriptor #7.
     fi
 }
 
 do_pre_backup() {
+    debug "do_pre_backup"
     # IO redirection for logging.
-    touch ${LOGFILE}
-    exec 6>&1           # Link file descriptor #6 with stdout.
-    exec > ${LOGFILE}     # stdout replaced with file ${LOGFILE}.
+    if [ x"$COMP" = "xnocomp" ];then
+        comp_msg="No compression"
+    else
+        comp_msg="${COMP}"
+    fi
     # If backing up all DBs on the server
     log_rule
     log "DB_SMART_BACKUP by kiorky@cryptelium.net"
     log "http://www.makina-corpus.com"
-    log ""
-    log "Backup Start Time `date`"
-    log "Backup of database server: ${BACKUP_TYPE}/${HOST}"
-    # Run command before we begin
-    # Test is seperate DB backups are required
-    log "Backup type: ${BACKUP_TYPE}"
-    if [ x"$COMP" = "xnocomp" ];then
-        log "No compressor found"
-    else
-            log "Using compressor: ${COMP}"
-    fi
+    log "Log: ${DSB_LOGFILE}"
+    log "Backup Start Time: ${YELLOW}$(readable_date)${NORMAL}"
+    log "Backup of database compression://type@server: ${YELLOW}${comp_msg}://${BACKUP_TYPE}@${HOST}${NORMAL}"
     log_rule
 }
 
 
 fix_perm() {
-    fic="$1"
-    if [ -e "$fic" ];then
-        if [ -d "$fic" ];then
+    fic="${1}"
+    if [ -e "${fic}" ];then
+        if [ -d "${fic}" ];then
             perm="${DPERM:-750}"
-        elif [ -f "$fic" ];then
+        elif [ -f "${fic}" ];then
             perm="${FPERM:-640}"
         fi
         chown ${OWNER:-"root"}:${GROUP:-"root"} "${fic}"
@@ -464,6 +504,7 @@ fix_perm() {
 }
 
 fix_perms() {
+    debug "fix_perms"
     find  "${TOP_BACKUPDIR}" -type d -print|\
         while read fic
         do
@@ -477,26 +518,34 @@ fix_perms() {
 }
 
 
+wrap_log() {
+    echo -e "$("$@"|sed "s/^/$(echo -e "${NORMAL}${RED}")$(print_name)     $(echo -e "${NORMAL}${YELLOW}")/g"|sed "s/\t/    /g"|sed "s/  +/   /g")${NORMAL}"
+}
+
 do_post_backup() {
     # Run command when we're done
     log_rule
-    log "Backup End Time `date`"
-    log_rule
+    debug "do_post_backup"
     log "Total disk space used for backup storage.."
-    log "Size - Location"
-    du -hs "$(get_backupdir)"/*
-    log ""
-    #Clean up IO redirection
-    exec 1>&6 6>&-      # Restore stdout and close file descriptor #6.
-    # Clean up Logfile
+    log "  Size   - Location:"
+    wrap_log du -sh "$(get_backupdir)"/*
+    log_rule
+    log "Backup end time: ${YELLOW}$(readable_date)${NORMAL}"
+    log_rule
+    deactivate_IO_redirection
+    sanitize_log
+}
+
+sanitize_log() {
+    sed -i -e "s/\x1B\[[0-9;]*[JKmsu]//g" "${DSB_LOGFILE}"
 }
 
 get_sorted_files() {
     files="$(ls -1 "${1}" 2>/dev/null)"
     sep="____----____----____"
-    echo -e "$files"|while read fic;do
+    echo -e "${files}"|while read fic;do
         key=""
-        oldkey="$fic"
+        oldkey="${fic}"
         while true;do
             key="$(echo "${oldkey}"|sed -e "s/_\([0-9][^0-9]\)/_0\1/g")"
             if [ x"${key}" != x"${oldkey}" ];then
@@ -511,36 +560,48 @@ get_sorted_files() {
 
 do_rotate() {
     log_rule
-    log "Execute backup rotation policy"
-    log "   - keep ${KEEP_LASTSNAPSHOTS} last snapshots"
-    log "   - keep ${KEEP_DAYS} daily dumps"
-    log "   - keep ${KEEP_WEEKS} weekly dumpss"
-    log "   - keep ${KEEP_MONTHES} monthly dumps"
-    log ""
+    debug "rotate"
+    log "Execute backup rotation policy, keep"
+    log "   -  logs           : ${YELLOW}${KEEP_LOGS}${NORMAL}"
+    log "   -  last snapshots : ${YELLOW}${KEEP_LASTS}${NORMAL}"
+    log "   -  daily dumps    : ${YELLOW}${KEEP_DAYS}${NORMAL}"
+    log "   -  weekly dumpss  : ${YELLOW}${KEEP_WEEKS}${NORMAL}"
+    log "   -  monthly dumps  : ${YELLOW}${KEEP_MONTHES}${NORMAL}"
     # ./TOPDIR/POSTGRESQL/HOSTNAME
-    ls -1d "$(get_backupdir)"/*|while read nsubdir;do
-        log "   Operating in: '$nsubdir'"
+    # or ./TOPDIR/logs for logs
+    KEEP_LOGS=2
+    ls -1d "${TOP_BACKUPDIR}" "$(get_backupdir)"/*|while read nsubdir;do
         # ./TOPDIR/HOSTNAME/DBNAME/${monthly,weekly,daily,dumps}
-        for chronodir in monthly weekly daily lastsnapshots;do
+        suf=""
+        if [ x"$nsubdir" = "x${TOP_BACKUPDIR}" ];then
+            subdirs="logs"
+            suf="/logs"
+        else
+            subdirs="monthly weekly daily lastsnapshots"
+        fi
+        log "   - Operating in: ${YELLOW}'${nsubdir}${suf}'${NORMAL}"
+        for chronodir in ${subdirs};do
             subdir="${nsubdir}/${chronodir}"
             if [ -d "${subdir}" ];then
-                if [ x"${chronodir}" = "xweekly" ];then
-                    to_keep=${KEEP_WEEKS}
+                if [ x"${chronodir}" = "xlogs" ];then
+                    to_keep=${KEEP_LOGS:-2}
+                elif [ x"${chronodir}" = "xweekly" ];then
+                    to_keep=${KEEP_WEEKS:-2}
                 elif [ x"${chronodir}" = "xmonthly" ];then
-                    to_keep=${KEEP_MONTHES}
+                    to_keep=${KEEP_MONTHES:-2}
                 elif [ x"${chronodir}" = "xdaily" ];then
-                    to_keep=${KEEP_DAYS}
+                    to_keep=${KEEP_DAYS:-2}
                 elif [ x"${chronodir}" = "xlastsnapshots" ];then
-                    to_keep=${KEEP_LASTSNAPSHOTS}
+                    to_keep=${KEEP_LASTS:-2}
                 else
                     to_keep="65635" # int limit
                 fi
                 i=0
                 get_sorted_files "${subdir}" | while read nfic;do
                     fic="${subdir}/${nfic}"
-                    i="$(($i+1))"
-                    if [ "$i" -gt "${to_keep}" ] && [ -e "${fic}" ];then
-                        log "       * Unliking ${fic}"
+                    i="$((${i}+1))"
+                    if [ "${i}" -gt "${to_keep}" ] && [ -e "${fic}" ];then
+                        log "       * Unliking ${YELLOW}${fic}${NORMAL}"
                         rm "${fic}"
                     fi
                 done
@@ -548,12 +609,54 @@ do_rotate() {
         done
     done
 }
+
 log_rule() {
     log "======================================================================"
 }
 
+handle_hook_error() {
+    debug "handle_hook_error"
+    log "Unexpected exit of ${HOOK_CMD} hook, you should never issue an exit in a hook"
+    log_rule
+    DSB_RETURN_CODE="1"
+    handle_exit
+}
+
+handle_exit() {
+    DSB_RETURN_CODE="${DSB_RETURN_CODE:-$?}"
+    debug "handle_exit"
+    DSB_HOOK_NO_TRAP="1"
+    do_rotate
+    do_hook "Postrotate command output" "post_rotate_hook"
+    do_cleanup_orphans
+    do_hook "Postcleanup command output" "post_cleanup_hook"
+    fix_perms
+    do_post_backup
+    do_hook "Postbackup command output" "post_backup_hook"
+    do_sendmail
+    do_hook "Postmail command output" "post_mail_hook"
+    if [ x"$DSB_RETURN_CODE" != "x0" ];then
+        log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
+    fi
+    if [ x"${DSB_GLOBAL_BACKUP_IN_FAILURE}" != x"" ];then
+        cyan_log "Global backup failed, check the log: ${DSB_LOGFILE}"
+        DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
+    fi
+    if [ x"${DSB_BACKUP_IN_FAILURE}" != x"" ];then
+        cyan_log "One of the databases backup failed, check the log: ${DSB_LOGFILE}"
+        DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
+    fi
+    exit "${DSB_RETURN_CODE}"
+}
+
+do_trap() {
+    debug "do_trap"
+	trap handle_exit      EXIT SIGHUP SIGINT SIGQUIT SIGTERM
+}
+
 do_cleanup_orphans() {
     log_rule
+    debug "do_cleanup_orphans"
     log "Cleaning orphaned dumps:"
     # prune all files in dumps dirs which have no more any
     # hardlinks in chronoted directories (weekly, monthly, daily)
@@ -563,94 +666,66 @@ do_cleanup_orphans() {
             find "$dumpdirs" -type f -links 1 -print 2>/dev/null|\
                 while read fic
                 do
-                    log "       * Pruning ${fic}"
+                    log "       * Pruning ${YELLOW}${fic}${NORMAL}"
                     rm -f "${fic}"
                 done
             done
 }
 
 do_hook() {
-    header="$1"
-    cmd="$2"
-    if [ x"$(fn_exists ${cmd})" = "x0" ];then
+    HOOK_HEADER="${1}"
+    HOOK_CMD="${2}"
+    if [ x"${DSB_HOOK_NO_TRAP}" = "x" ];then
+        trap handle_hook_error EXIT SIGHUP SIGINT SIGQUIT SIGTERM
+    fi
+    if [ x"$(fn_exists ${HOOK_CMD})" = "x0" ];then
+        debug "do_hook ${HOOK_CMD}"
         log_rule
-        log "${header}"
-        log ""
-        ${cmd}
-        log ""
+        log "HOOK: ${YELLOW} ${HOOK_HEADER}"
+        "${HOOK_CMD}"
         log_rule
         log ""
+    fi
+    if [ x"${DSB_HOOK_NO_TRAP}" = "x" ];then
+        trap handle_exit EXIT SIGHUP SIGINT SIGQUIT SIGTERM
     fi
 }
 
 do_backup() {
+    debug "do_backup"
     if [ x"${BACKUP_TYPE}" = "x" ];then
         die "No backup type, choose between mysql & postgresql"
     fi
     # if either the source failed or we do not have a configuration file, bail out
-    die_in_error "Invalid configuration file: ${DB_SMART_BACKUP_CONFFILE}"
+    die_in_error "Invalid configuration file: ${DSB_CONF_FILE}"
     do_pre_backup
-    do_hook "Prebackup command output." "pre_backup_hook"
+    do_hook "Prebackup command output" "pre_backup_hook"
     if [ x"${DO_GLOBAL_BACKUP}" != "x" ];then
         do_global_backup
         if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
-            do_hook "Postglobalbackup command output." "post_global_backup_hook"
+            do_hook "Postglobalbackup command output" "post_global_backup_hook"
+            DSB_GLOBAL_BACKUP_IN_FAILURE="y"
         else
-            do_hook "Postglobalbackup(failure) command output." "post_global_backup_failure_hook"
+            do_hook "Postglobalbackup(failure) command output" "post_global_backup_failure_hook"
         fi
     fi
+    log_rule
+    log "DATABASES BACKUP"
+    log_rule
     for db in ${DBNAMES};do
         do_db_backup $db
         if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
-            do_hook "Postdbbackup: ${db}  command output." "post_db_backup_hook"
+            do_hook "Postdbbackup: ${db}  command output" "post_db_backup_hook"
+            DSB_BACKUP_IN_FAILURE="y"
         else
-            do_hook "Postdbbackup: ${db}(failure)  command output." "post_db_backup_failure_hook"
+            do_hook "Postdbbackup: ${db}(failure)  command output" "post_db_backup_failure_hook"
         fi
     done
-    do_rotate
-    do_hook "Postrotate command output." "post_rotate_hook"
-    do_cleanup_orphans
-    do_hook "Postcleanup command output." "post_cleanup_hook"
-    do_hook "Postbackup command output." "post_backup_hook"
-    do_post_backup
-    do_sendmail
-    do_hook "Postmail command output." "post_mail_hook"
-    fix_perms
-    eval rm -f "${LOGFILE}"
 }
 
 mark_run_backup() {
-    DB_SMART_BACKUP_CONFFILE="$1"
+    DSB_CONF_FILE="${1}"
     DO_BACKUP="1"
-}
-
-set_postgresql_vars() {
-    if [ x"${RUNAS}" = "x" ];then
-        RUNAS="postgres"
-    fi
-    export RUNAS="${RUNAS:-postgres}"
-    export PGHOST="${HOST}"
-    export PGPORT="${PORT}"
-    export PGUSER="${RUNAS}"
-    export PGPASSWORD="${PASSWORD}"
-    if [ x"${PGHOST}" = "xlocalhost" ]; then
-        PGHOST=
-    fi
-    if [ x"${DBNAMES}" = "xall" ]; then
-        if [[ " ${DBEXCLUDE} " != *" template0 "* ]];then
-            DBEXCLUDE="${DBEXCLUDE} template0"
-        fi
-        for exclude in ${DBEXCLUDE};do
-            DBNAMES=`echo ${ALL_DBNAMES} | sed "s/\b${exclude}\b//g"`
-        done
-    fi
-    for i in "psql::${PSQL}" "pg_dumpall::${PG_DUMPALL}" "pg_dump::${PG_DUMP}";do
-        var="$(echo $i|awk -F:: '{print $1}')"
-        bin="$(echo $i|awk -F:: '{print $2}')"
-        if  [ ! -e "$bin" ];then
-            die "missing $var"
-        fi
-    done
 }
 
 verify_backup_type() {
@@ -662,53 +737,54 @@ verify_backup_type() {
 }
 
 set_vars() {
-    args=$@
+    debug "set_vars"
+    args=${@}
     YELLOW="\e[1;33m"
     RED="\\033[31m"
     CYAN="\\033[36m"
     NORMAL="\\033[0m"
-    if [ x"$NO_COLORS" != "x" ];then
+    if [ x"$NO_COLOR" != "x" ] || [ x"$NOCOLOR" != "x" ] || [ x"$NO_COLORS" != "x" ] || [ x"$NOCOLORS" != "x" ];then
         YELLOW=""
         RED=""
         CYAN=""
         NORMAL=""
     fi
     PARAM=""
-    DB_SMART_BACKUP_CONFFILE_DEFAULT="/etc/db_smartbackup.conf.sh"
-    parsable_args="$(echo "$@"|sed "s/^--//g")"
+    DSB_CONF_FILE_DEFAULT="/etc/db_smartbackup.conf.sh"
+    parsable_args="$(echo "${@}"|sed "s/^--//g")"
     if [ x"${parsable_args}" = "x" ];then
         USAGE="1"
     fi
     if [ -e "${parsable_args}" ];then
-        mark_run_backup $1
+        mark_run_backup ${1}
     else
         while true
         do
             sh="1"
-            if [ x"$1" = "x$PARAM" ];then
+            if [ x"${1}" = "x$PARAM" ];then
                 break
             fi
-            if [ x"$1" = "x--gen-config" ];then
-                GENERATE_CONFIG="1"
-                DB_SMART_BACKUP_CONFFILE="${2:-${DB_SMART_BACKUP_CONFFILE_DEFAULT}}"
+            if [ x"${1}" = "x--gen-config" ];then
+                DSB_GENERATE_CONFIG="1"
+                DSB_CONF_FILE="${2:-${DSB_CONF_FILE_DEFAULT}}"
                 sh="2"
-            elif [ x"$1" = "x-b" ] || [ x"$1" = "x--backup" ];then
-                mark_run_backup $2;sh="2"
+            elif [ x"${1}" = "x-b" ] || [ x"${1}" = "x--backup" ];then
+                mark_run_backup ${2};sh="2"
             else
                 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
                     usage
                     die "Invalid invocation"
                 fi
             fi
-            PARAM="$1"
-            OLD_ARG="$1"
+            PARAM="${1}"
+            OLD_ARG="${1}"
             for i in $(seq $sh);do
                 shift
-                if [ x"$1" = "x${OLD_ARG}" ];then
+                if [ x"${1}" = "x${OLD_ARG}" ];then
                     break
                 fi
             done
-            if [ x"$1" = "x" ];then
+            if [ x"${1}" = "x" ];then
                 break
             fi
         done
@@ -720,10 +796,11 @@ set_vars() {
     BACKUP_TYPE=${BACKUP_TYPE:-}
     TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/pgbackups}"
     DO_GLOBAL_BACKUP="1"
-    KEEP_LASTSNAPSHOTS="${NB_DAILY:-24}"
-    KEEP_DAYS="${NB_DAILY:-14}"
-    KEEP_WEEKS="${NB_WEEKLY:-8}"
-    KEEP_MONTHES="${NB_MONTHLY:-12}"
+    KEEP_LASTS="${KEEP_LASTS:-24}"
+    KEEP_DAYS="${KEEP_DAYS:-14}"
+    KEEP_WEEKS="${KEEP_WEEKS:-8}"
+    KEEP_MONTHES="${KEEP_MONTHES:-12}"
+    KEEP_LOGS="${KEEP_LOGS:-60}"
     DPERM="${DPERM:-"750"}"
     FPERM="${FPERM:-"640"}"
     OWNER="${OWNER:-"root"}"
@@ -732,7 +809,7 @@ set_vars() {
     ######## Database connection settings
     HOST="${HOST:-localhost}"
     PORT="${PORT:-}"
-    RUNAS="${USER:-}"
+    RUNAS="${RUNAS:-}"
     PASSWORD="${PASSWORD:-}"
     DBNAMES="${DBNAMES:-all}"
     CREATE_DATABASE=${CREATE_DATABASE:-yes}
@@ -763,6 +840,7 @@ set_vars() {
     PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     DATE=`date +%Y-%m-%d` # Datestamp e.g 2002-09-21
     FDATE=`date +%Y-%m-%d_%H-%M-%S` # Datestamp e.g 2002-09-21
+    FULL_FDATE=`date +%Y-%m-%d_%H-%M-%S.%N` # Datestamp e.g 2002-09-21
     DOY=`date +%j`  # Day of the YEAR 0..366
     DOW=`date +%A`  # Day of the week e.g. Monday
     DNOW=`date +%u` # Day number of the week 1 to 7 where 1 represents Monday
@@ -771,43 +849,54 @@ set_vars() {
     YEAR=`date +%Y` # Datestamp e.g 2002-09-21
     MNUM=`date +%m` # Month e.g 1
     W=`date +%V`    # Week Number e.g 37
-    LOGFILE=${TOP_BACKUPDIR}/${PGHOST}-`date +%N`.log    # Logfile Name
-    BACKUPFILES=""                    # thh: added for later mailing
+    DSB_LOGDIR="${TOP_BACKUPDIR}/logs"
+    DSB_LOGFILE="${DSB_LOGDIR}/${__NAME__}_${FULL_FDATE}.log"    # Logfile Name
+    DSB_BACKUPFILES="" # thh: added for later mailing
+    DSB_RETURN_CODE=""
+    DSB_GLOBAL_BACKUP_FAILED="3"
+    DSB_BACKUP_FAILED="4"
 
+    activate_IO_redirection
     set_compressor
     # source conf file if any
-    if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
-        . "${DB_SMART_BACKUP_CONFFILE}"
-    fi
-    if [ x"${BACKUP_TYPE}" != "x" ];then
-        "${BACKUP_TYPE}_check_connectivity"
-        ALL_DBNAMES="$(${BACKUP_TYPE}_get_all_databases)"
-        verify_backup_type
+    if [ -e "${DSB_CONF_FILE}" ];then
+        . "${DSB_CONF_FILE}"
     fi
 
-    if [ x"${BACKUP_TYPE}" = "xpostgresql" ] || [ x"${BACKUP_TYPE}" = "xmysql" ];then
-        "set_${BACKUP_TYPE}_vars"
+    if [ x"${BACKUP_TYPE}" != "x" ];then
+        verify_backup_type
+        if [ x"$(fn_exists "${BACKUP_TYPE}_set_connection_vars")" = "x0" ];then
+            "${BACKUP_TYPE}_set_connection_vars"
+        fi
+        "${BACKUP_TYPE}_check_connectivity"
+        if [ x"$(fn_exists "${BACKUP_TYPE}_get_all_databases")" = "x0" ];then
+            ALL_DBNAMES="$(${BACKUP_TYPE}_get_all_databases)"
+        fi
+        if [ x"$(fn_exists "${BACKUP_TYPE}_set_vars")" = "x0" ];then
+            "${BACKUP_TYPE}_set_vars"
+        fi
     fi
     # Re source to reoverride any core overriden variable
-    if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
-        . "${DB_SMART_BACKUP_CONFFILE}"
+    if [ -e "${DSB_CONF_FILE}" ];then
+        . "${DSB_CONF_FILE}"
     fi
 }
 
 do_main() {
-    set_vars "$@"
+    do_trap
+    set_vars "${@}"
     if [ x"${USAGE}" != "x" ];then
         usage
         exit 0
-    elif [ x"${GENERATE_CONFIG}" != "x" ];then
+    elif [ x"${DSB_GENERATE_CONFIG}" != "x" ];then
         generate_configuration_file
         die_in_error "end_of_scripts"
     elif [ x"${DO_BACKUP}" != "x" ];then
-        if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
+        if [ -e "${DSB_CONF_FILE}" ];then
             do_backup
             die_in_error "end_of_scripts"
         else
-            cyan_log "Missing or invalid configuration file: ${DB_SMART_BACKUP_CONFFILE}"
+            cyan_log "Missing or invalid configuration file: ${DSB_CONF_FILE}"
             exit 1
         fi
     fi
@@ -815,27 +904,60 @@ do_main() {
 
 #################### POSTGRESQL
 pg_dumpall_() {
-    runas ${PG_DUMPALL} "$@"
+    runas "${PG_DUMPALL}" "${@}"
 }
 
 pg_dump_() {
-    runas ${PG_DUMP} "$@"
+    runas "${PG_DUMP}" "${@}"
 }
 
 psql_() {
-    runas whoami
-    runas ${PSQL} "$@"
+    runas "${PSQL}" "${@}"
 }
 
 pg_user() {
     echo "${PGUSER:-postgres}"
 }
 
+# REAL API IS HERE
+postgresql_set_connection_vars() {
+    export RUNAS="${RUNAS:-postgres}"
+    export PGHOST="${HOST}"
+    export PGPORT="${PORT}"
+    export PGUSER="${PGUSER:-${RUNAS}}"
+    export PGPASSWORD="${PASSWORD}"
+    if [ x"${PGHOST}" = "xlocalhost" ]; then
+        PGHOST=
+    fi
+}
+
+postgresql_set_vars() {
+    if [ x"${DBNAMES}" = "xall" ]; then
+        DBNAMES=${ALL_DBNAMES}
+        if [ " ${DBEXCLUDE#*" template0 "*} " != " $DBEXCLUDE " ];then
+            DBEXCLUDE="${DBEXCLUDE} template0"
+        fi
+        for exclude in ${DBEXCLUDE};do
+            DBNAMES=$(echo ${DBNAMES} | sed "s/\b${exclude}\b//g")
+        done
+    fi
+    if [ x"${DBNAMES}" = "xall" ]; then
+        die "${BACKUP_TYPE}: could not get all databases"
+    fi
+    for i in "psql::${PSQL}" "pg_dumpall::${PG_DUMPALL}" "pg_dump::${PG_DUMP}";do
+        var="$(echo ${i}|awk -F:: '{print $1}')"
+        bin="$(echo ${i}|awk -F:: '{print $2}')"
+        if  [ ! -e "${bin}" ];then
+            die "missing ${var}"
+        fi
+    done
+}
+
 postgresql_check_connectivity() {
     who="$(whoami)"
     pgu="$(pg_user)"
     psql_ --username="${pgu}" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
-    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS in $DB_SMART_BACKUP_CONFFILE"
+    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS("$RUNAS") in $DSB_CONF_FILE"
 }
 
 postgresql_get_all_databases() {
@@ -843,16 +965,36 @@ postgresql_get_all_databases() {
 }
 
 postgresql_dumpall() {
-    pg_dumpall_ $OPTALL > "$2"
+    pg_dumpall_ $OPTALL > "${2}"
 }
 
 postgresql_dump() {
-    pg_dump_ $OPT "$1" > "$2"
+    pg_dump_ $OPT "${1}" > "${2}"
 }
 
+#################### MYSQL
+mysql_check_connectivity() {
+    who="$(whoami)"
+    pgu="$(pg_user)"
+    psql_ --username="${pgu}" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
+    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS in $DSB_CONF_FILE"
+}
+
+mysql_get_all_databases() {
+    LANG=C LC_ALL=C psql_ --username=${PGUSER:-postgres} ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
+}
+
+mysql_dumpall() {
+    LAST_BACKUP_STATUS=""
+    /bin/true
+}
+
+mysql_dump() {
+    pg_dump_ $OPT "${1}" > "${2}"
+}
 #################### MAIN
 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
-    do_main "$@"
+    do_main "${@}"
 fi
 
-# vim:set ft=bash sts=4 ts=4  tw=0:
+# vim:set ft=sh sts=4 ts=4  tw=0:
