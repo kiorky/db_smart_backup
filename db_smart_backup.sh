@@ -109,7 +109,7 @@ generate_configuration_file() {
 #OPTALL="--globals-only"
 
 ######## MYSQL
-#MYSQL_SOCK_PATHES=""
+#MYSQL_SOCK_PATHS=""
 #MYSQL=""
 #MYSQLDUMP=""
 # do we disable mysqldump --single-transaction0
@@ -863,7 +863,7 @@ set_vars() {
     OPTALL="${OPTALL:-"--globals-only"}"
 
     ######### MYSQL
-    MYSQL_SOCK_PATHES="${MYSQL_SOCK_PATHES:-"/var/run/mysqld/mysqld.sock"}"
+    MYSQL_SOCK_PATHS="${MYSQL_SOCK_PATHS:-"/var/run/mysqld/mysqld.sock"}"
     MYSQL="${MYSQL:-$(which mysql 2>/dev/null)}"
     MYSQLDUMP="${MYSQLDUMP:-$(which mysqldump 2>/dev/null)}"
     # do we disable mysqldump --single-transaction0
@@ -1044,7 +1044,7 @@ mysql_set_connection_vars() {
     export MYSQL_TCP_PORT="${PORT:-3306}"
     export MYSQL_PWD="${PASSWORD}"
     if [ x"${MYSQL_HOST}" = "xlocalhost" ];then
-        echo -e "$MYSQL_SOCK_PATHES"|\
+        echo -e "$MYSQL_SOCK_PATHS"|\
             while read path
             do
                 export MYSQL_HOST="127.0.0.1"
