@@ -114,10 +114,31 @@ The great things
       is what we can call an orphan and is willing to be pruned.
     - Indeed, this means that our backups are only in the dumps folder.
 
+
+
+
+Backup types
+-------------
 PostGRESQL specificities
--------------------------
+++++++++++++++++++++++++
 - We use environment variables to set the host, port, password and user to set at backup
   time
+
+Add another one
++++++++++++++++++++++
+You need to add:
+
+    - Add a function "yourtype_check_connectivity" that exit in error if the
+      connexion is not possible
+    - Add a function "yourtype_get_all_databases" that return a space separated
+      list of your database dbs.
+    - Add 2 functions "yourtype_dump" and "yourtype_dumpall" even if one of them
+      is just an empty stub, the script will then introspect itself to find
+      them.
+    - Add what is needed to load the configuration in the default configuration
+      file in the generate_configuration_file method
+    - Hack the defaults and variables in set_vars, the same way.
+
 
 Hooks
 ---------

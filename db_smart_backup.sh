@@ -25,11 +25,12 @@ generate_configuration_file() {
 #COMP=bzip2
 
 #User to run dumps dump binaries as
-#RUNAS=
+#RUNAS=postgres
 
 ######## Backup settings
 # one of: postgresql mysql
-#BACKUP_TYPE=${BACKUP_TYPE:-}
+#BACKUP_TYPE=postgresql
+#BACKUP_TYPE=mysql
 
 # Backup directory location e.g /backups
 #TOP_BACKUPDIR="/var/pgbackups"
@@ -64,7 +65,6 @@ generate_configuration_file() {
 # defaults to postgres on postgresql backup
 # as ident is used by default on many installs, we certainly
 # do not need either a password
-#USER=""
 #PASSWORD=""
 
 # List of DBNAMES for Daily/Weekly Backup e.g. "DB1 DB2 DB3"
@@ -223,35 +223,13 @@ runas() {
     shift
     args=$(quote_all "$@")
     if [ x"$RUNAS" != "x" ];then
-        su $RUNAS -c "$bin $args"
+        su ${RUNAS} -c "${bin} ${args}"
     else
-        "$bin" "$@"
+        "${bin}" "${@}"
     fi
 }
 
-pg_dumpall_() {
-    runas ${PG_DUMPALL} "$@"
-}
 
-pg_dump_() {
-    runas ${PG_DUMP} "$@"
-}
-
-psql_() {
-    runas ${PSQL} "$@"
-}
-
-postgresql_get_all_databases() {
-    psql_ --username=${PGUSER:-postgres} ${HOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
-}
-
-postgresql_dumpall() {
-    pg_dumpall_ $OPTALL "$1" > "$2"
-}
-
-postgresql_dump() {
-    pg_dump_ $OPT "$1" > "$2"
-}
 
 get_compressed_name() {
     if [ x"${COMP}" = "xxz" ];then
@@ -403,14 +381,20 @@ dummy_for_tests() {
 }
 
 do_db_backup_() {
+    LAST_BACKUP_STATUS=""
     db="$1"
-    fun_="$2"                                                   ea
+    fun_="$2"
     create_db_directories "${db}"
     real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.sql"
     zreal_filename="$(get_compressed_name "${real_filename}")"
     $fun_ "${db}" "${real_filename}"
-    do_compression "${real_filename}" "${zreal_filename}"
-    link_into_dirs "${db}" "${real_filename}"
+    if [ x"$?" != "x0" ];then
+        LAST_BACKUP_STATUS="failure"
+        log "${CYAN}Backup of ${db} failed${NORMAL}"
+    else
+        do_compression "${real_filename}" "${zreal_filename}"
+        link_into_dirs "${db}" "${real_filename}"
+    fi
 }
 
 do_db_backup() {
@@ -565,7 +549,7 @@ do_rotate() {
     done
 }
 log_rule() {
-    log "======================================================================" 
+    log "======================================================================"
 }
 
 do_cleanup_orphans() {
@@ -609,18 +593,18 @@ do_backup() {
     do_hook "Prebackup command output." "pre_backup_hook"
     if [ x"${DO_GLOBAL_BACKUP}" != "x" ];then
         do_global_backup
-        if [ x"$?" = "x0" ];then
+        if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
             do_hook "Postglobalbackup command output." "post_global_backup_hook"
         else
             do_hook "Postglobalbackup(failure) command output." "post_global_backup_failure_hook"
         fi
     fi
-    for DB in ${DBNAMES};do
-        do_db_backup $DB
-        if [ x"$?" = "x0" ];then
-            do_hook "Postdbbackup: ${DBNAME}  command output." "post_db_backup_hook"
+    for db in ${DBNAMES};do
+        do_db_backup $db
+        if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
+            do_hook "Postdbbackup: ${db}  command output." "post_db_backup_hook"
         else
-            do_hook "Postdbbackup: ${DBNAME}(failure)  command output." "post_db_backup_failure_hook"
+            do_hook "Postdbbackup: ${db}(failure)  command output." "post_db_backup_failure_hook"
         fi
     done
     do_rotate
@@ -641,13 +625,13 @@ mark_run_backup() {
 }
 
 set_postgresql_vars() {
-    if [ x"${USER}" = "x" ];then
-        USER="postgres"
+    if [ x"${RUNAS}" = "x" ];then
+        RUNAS="postgres"
     fi
     export RUNAS="${RUNAS:-postgres}"
     export PGHOST="${HOST}"
     export PGPORT="${PORT}"
-    export PGUSER="${USER}"
+    export PGUSER="${RUNAS}"
     export PGPASSWORD="${PASSWORD}"
     if [ x"${PGHOST}" = "xlocalhost" ]; then
         PGHOST=
@@ -671,7 +655,7 @@ set_postgresql_vars() {
 
 verify_backup_type() {
     for typ_ in _dump _dumpall;do
-        if [ x"$(fn_exists ${BACKUP_TYPE}${typ_})" = "x0" ];then
+        if [ x"$(fn_exists ${BACKUP_TYPE}${typ_})" != "x0" ];then
             die "Please provide a ${BACKUP_TYPE}${typ_} export function"
         fi
     done
@@ -748,7 +732,7 @@ set_vars() {
     ######## Database connection settings
     HOST="${HOST:-localhost}"
     PORT="${PORT:-}"
-    USER="${USER:-}"
+    RUNAS="${USER:-}"
     PASSWORD="${PASSWORD:-}"
     DBNAMES="${DBNAMES:-all}"
     CREATE_DATABASE=${CREATE_DATABASE:-yes}
@@ -791,16 +775,20 @@ set_vars() {
     BACKUPFILES=""                    # thh: added for later mailing
 
     set_compressor
-
+    # source conf file if any
+    if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
+        . "${DB_SMART_BACKUP_CONFFILE}"
+    fi
     if [ x"${BACKUP_TYPE}" != "x" ];then
+        "${BACKUP_TYPE}_check_connectivity"
         ALL_DBNAMES="$(${BACKUP_TYPE}_get_all_databases)"
         verify_backup_type
     fi
 
-    if [ x"${BACKUP_TYPE}" = "xpostgresql" ] && [ x"${BACKUP_TYPE}" = "xmysql" ];then
+    if [ x"${BACKUP_TYPE}" = "xpostgresql" ] || [ x"${BACKUP_TYPE}" = "xmysql" ];then
         "set_${BACKUP_TYPE}_vars"
     fi
-    # source conf file if any
+    # Re source to reoverride any core overriden variable
     if [ -e "${DB_SMART_BACKUP_CONFFILE}" ];then
         . "${DB_SMART_BACKUP_CONFFILE}"
     fi
@@ -825,6 +813,46 @@ do_main() {
     fi
 }
 
+#################### POSTGRESQL
+pg_dumpall_() {
+    runas ${PG_DUMPALL} "$@"
+}
+
+pg_dump_() {
+    runas ${PG_DUMP} "$@"
+}
+
+psql_() {
+    runas whoami
+    runas ${PSQL} "$@"
+}
+
+pg_user() {
+    echo "${PGUSER:-postgres}"
+}
+
+postgresql_check_connectivity() {
+    who="$(whoami)"
+    pgu="$(pg_user)"
+    psql_ --username="${pgu}" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
+    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS in $DB_SMART_BACKUP_CONFFILE"
+}
+
+postgresql_get_all_databases() {
+    LANG=C LC_ALL=C psql_ --username=${PGUSER:-postgres} ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
+}
+
+postgresql_dumpall() {
+    pg_dumpall_ $OPTALL > "$2"
+}
+
+postgresql_dump() {
+    pg_dump_ $OPT "$1" > "$2"
+}
+
+#################### MAIN
 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
     do_main "$@"
 fi
+
+# vim:set ft=bash sts=4 ts=4  tw=0:
