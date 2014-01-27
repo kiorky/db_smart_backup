@@ -61,6 +61,7 @@ Backup::
 
     ./db_smart_backup.sh /path/to/config
 
+
 Changelog
 ----------
 
@@ -156,6 +157,13 @@ We use hardlinks to achieve that but be aware that it may have filesystem limits
     - number of databases backed up (a lot if every possible anymay on modern filesystems (2^32 hardlinks)
       and count something for the max like **366x2+57+12** for a year and a db.
     - and all subdirs should be on the same mounted point where the backup dir
+
+Default policy
+++++++++++++++
+- We keep the **24** last done dumps
+- We keep **14** days left
+- We keep 1 backup per week for the last **8** weeks
+- We keep 1 backup per month for the last **12** monthes
 
 Please Note!!
 --------------
