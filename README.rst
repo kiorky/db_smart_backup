@@ -119,7 +119,10 @@ PostGRESQL specificities
 
 Hooks
 ---------
-- We provide ways to run a script
+- We provide a hook mecanism to let you configure custom code at each stage of
+  the backup program. For this, you just need to uncomment the relevant out in
+  your configuration file and implement whatever code you want, and even call
+  another script in another language.
 
   - after the backup program starts: **pre_backup_hook**
   - after the global backup: **post_global_backup_failure_hook**
@@ -131,8 +134,9 @@ Hooks
   - at backup end: **post_backup_hook**
   - when the mail is sent: **post_mail_hook**
 
-- Think that you will have in the environment one of
-  all the variables defined and exported by the script.
+- Think that you will have access in the environment of
+  the hook to all the variables defined and exported by the script.
+  You just have to check by reading the source what to test and how.
 
 Options
 -----------
