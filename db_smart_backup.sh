@@ -736,9 +736,7 @@ verify_backup_type() {
     done
 }
 
-set_vars() {
-    debug "set_vars"
-    args=${@}
+set_colors() {
     YELLOW="\e[1;33m"
     RED="\\033[31m"
     CYAN="\\033[36m"
@@ -749,6 +747,12 @@ set_vars() {
         CYAN=""
         NORMAL=""
     fi
+}
+
+set_vars() {
+    debug "set_vars"
+    args=${@}
+    set_colors
     PARAM=""
     DSB_CONF_FILE_DEFAULT="/etc/db_smartbackup.conf.sh"
     parsable_args="$(echo "${@}"|sed "s/^--//g")"
@@ -883,21 +887,27 @@ set_vars() {
 }
 
 do_main() {
-    do_trap
-    set_vars "${@}"
-    if [ x"${USAGE}" != "x" ];then
+    if [ x"${@}" = "x" ];then
+        set_colors
         usage
         exit 0
-    elif [ x"${DSB_GENERATE_CONFIG}" != "x" ];then
-        generate_configuration_file
-        die_in_error "end_of_scripts"
-    elif [ x"${DO_BACKUP}" != "x" ];then
-        if [ -e "${DSB_CONF_FILE}" ];then
-            do_backup
+    else
+        do_trap
+        set_vars "${@}" 
+        if [ x"${@}" = "x" ];then
+            usage
+            exit 0 
+        elif [ x"${DSB_GENERATE_CONFIG}" != "x" ];then
+            generate_configuration_file
             die_in_error "end_of_scripts"
-        else
-            cyan_log "Missing or invalid configuration file: ${DSB_CONF_FILE}"
-            exit 1
+        elif [ x"${DO_BACKUP}" != "x" ];then
+            if [ -e "${DSB_CONF_FILE}" ];then
+                do_backup
+                die_in_error "end_of_scripts"
+            else
+                cyan_log "Missing or invalid configuration file: ${DSB_CONF_FILE}"
+                exit 1
+            fi
         fi
     fi
 }
