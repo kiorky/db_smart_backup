@@ -119,13 +119,17 @@ The great things
 
 Backup types
 -------------
-PostGRESQL specificities
-++++++++++++++++++++++++
+PostGRESQL & mysql specificities
+++++++++++++++++++++++++++++++++++++++++
 - We use traditionnal postgresql environment variables to set the host, port, password and user to set at backup
   time
 
+- For postgresql, you will certainly have to set only the BACKUP_TYPE to
+  postgresl
+- For Mysql you may have only to input the password
+
 Add another backup type
-+++++++++++++++++++++
+++++++++++++++++++++++++
 You need to first read the implementations for **mysql** and **postgresql**, those are
 really simple, then follow the next guide (you do not need to make the script
 call your functions, they are introspected):

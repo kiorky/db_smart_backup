@@ -24,8 +24,10 @@ generate_configuration_file() {
 # Choose Compression type. (gzip or bzip2 or xz)
 #COMP=bzip2
 
-#User to run dumps dump binaries as
+#User to run dumps dump binaries as, defaults to logged in user
 #RUNAS=postgres
+#DB user to connect to the database with, defaults to $RUNAS
+#DBUSER=postgres
 
 ######## Backup settings
 # one of: postgresql mysql
@@ -105,6 +107,20 @@ generate_configuration_file() {
 
 # OPT string for use with pg_dumpall ( see man pg_dumpall )
 #OPTALL="--globals-only"
+
+######## MYSQL
+#MYSQL_SOCK_PATHES=""
+#MYSQL=""
+#MYSQLDUMP=""
+# do we disable mysqldump --single-transaction0
+#MYSQLDUMP_NO_SINGLE_TRANSACTION=""
+# disable to enable autocommit
+#MYSQLDUMP_AUTOCOMMIT="1"
+# set to enable complete inserts (true by default, disabling enable extended inserts)
+#MYSQLDUMP_COMPLETEINSERTS="1"
+# do we disable mysqldump --lock-tables=false
+#MYSQLDUMP_LOCKTABLES=""
+
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -226,6 +242,10 @@ usage() {
     yellow_log "        generate a new config file]"
 }
 
+runas() {
+    echo "${RUNAS:-"$(whoami)"}"
+}
+
 quote_all() {
     cmd=""
     for i in "${@}";do
@@ -234,18 +254,16 @@ quote_all() {
     echo "${cmd}"
 }
 
-runas() {
+runcmd_as() {
     bin="${1}"
     shift
     args=$(quote_all "${@}")
-    if [ x"$RUNAS" != "x" ];then
-        su ${RUNAS} -c "${bin} ${args}"
-    else
+    if [ x"$(runas)" = "x" ] || [ x"$(runas)" = "x$(whoami)" ];then
         "${bin}" "${@}"
+    else
+        su ${RUNAS} -c "${bin} ${args}"
     fi
 }
-
-
 
 get_compressed_name() {
     if [ x"${COMP}" = "xxz" ];then
@@ -624,27 +642,29 @@ handle_hook_error() {
 
 handle_exit() {
     DSB_RETURN_CODE="${DSB_RETURN_CODE:-$?}"
-    debug "handle_exit"
-    DSB_HOOK_NO_TRAP="1"
-    do_rotate
-    do_hook "Postrotate command output" "post_rotate_hook"
-    do_cleanup_orphans
-    do_hook "Postcleanup command output" "post_cleanup_hook"
-    fix_perms
-    do_post_backup
-    do_hook "Postbackup command output" "post_backup_hook"
-    do_sendmail
-    do_hook "Postmail command output" "post_mail_hook"
-    if [ x"$DSB_RETURN_CODE" != "x0" ];then
-        log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
-    fi
-    if [ x"${DSB_GLOBAL_BACKUP_IN_FAILURE}" != x"" ];then
-        cyan_log "Global backup failed, check the log: ${DSB_LOGFILE}"
-        DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
-    fi
-    if [ x"${DSB_BACKUP_IN_FAILURE}" != x"" ];then
-        cyan_log "One of the databases backup failed, check the log: ${DSB_LOGFILE}"
-        DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
+    if [ x"${DSB_BACKUP_STARTED}" != "x" ];then
+        debug "handle_exit"
+        DSB_HOOK_NO_TRAP="1"
+        do_rotate
+        do_hook "Postrotate command output" "post_rotate_hook"
+        do_cleanup_orphans
+        do_hook "Postcleanup command output" "post_cleanup_hook"
+        fix_perms
+        do_post_backup
+        do_hook "Postbackup command output" "post_backup_hook"
+        do_sendmail
+        do_hook "Postmail command output" "post_mail_hook"
+        if [ x"$DSB_RETURN_CODE" != "x0" ];then
+            log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
+        fi
+        if [ x"${DSB_GLOBAL_BACKUP_IN_FAILURE}" != x"" ];then
+            cyan_log "Global backup failed, check the log: ${DSB_LOGFILE}"
+            DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
+        fi
+        if [ x"${DSB_BACKUP_IN_FAILURE}" != x"" ];then
+            cyan_log "One of the databases backup failed, check the log: ${DSB_LOGFILE}"
+            DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
+        fi
     fi
     exit "${DSB_RETURN_CODE}"
 }
@@ -698,6 +718,7 @@ do_backup() {
     fi
     # if either the source failed or we do not have a configuration file, bail out
     die_in_error "Invalid configuration file: ${DSB_CONF_FILE}"
+    DSB_BACKUP_STARTED="y"
     do_pre_backup
     do_hook "Prebackup command output" "pre_backup_hook"
     if [ x"${DO_GLOBAL_BACKUP}" != "x" ];then
@@ -734,6 +755,14 @@ verify_backup_type() {
             die "Please provide a ${BACKUP_TYPE}${typ_} export function"
         fi
     done
+}
+
+db_user() {
+    echo "${DBUSER:-${RUNAS}}"
+}
+
+db_user() {
+    echo "${RUNAS:-"$(whoami)"}"
 }
 
 set_colors() {
@@ -813,7 +842,8 @@ set_vars() {
     ######## Database connection settings
     HOST="${HOST:-localhost}"
     PORT="${PORT:-}"
-    RUNAS="${RUNAS:-}"
+    RUNAS="" # see runas function
+    DBUSER="" # see db_user function
     PASSWORD="${PASSWORD:-}"
     DBNAMES="${DBNAMES:-all}"
     CREATE_DATABASE=${CREATE_DATABASE:-yes}
@@ -831,6 +861,19 @@ set_vars() {
     PG_DUMPALL="${PG_DUMPALL:-"$(which pg_dumpall 2>/dev/null)"}"
     OPT="${OPT:-"--create -Fc"}"
     OPTALL="${OPTALL:-"--globals-only"}"
+
+    ######### MYSQL
+    MYSQL_SOCK_PATHES="${MYSQL_SOCK_PATHES:-"/var/run/mysqld/mysqld.sock"}"
+    MYSQL="${MYSQL:-$(which mysql 2>/dev/null)}"
+    MYSQLDUMP="${MYSQLDUMP:-$(which mysqldump 2>/dev/null)}"
+    # do we disable mysqldump --single-transaction0
+    MYSQLDUMP_NO_SINGLE_TRANSACTION="${MYSQLDUMP_NO_SINGLE_TRANSACTION:-}"
+    # set to enable autocommit
+    MYSQLDUMP_AUTOCOMMIT="${MYSQLDUMP_AUTOCOMMIT:-1}"
+    # set to enable complete inserts (true by default, disabling enable extended inserts)
+    MYSQLDUMP_COMPLETEINSERTS="${MYSQLDUMP_COMPLETEINSERTS:-1}"
+    # do we disable mysqldump --lock-tables=false
+    MYSQLDUMP_LOCKTABLES="${MYSQLDUMP_LOCKTABLES:-}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"
@@ -887,16 +930,16 @@ set_vars() {
 }
 
 do_main() {
-    if [ x"${@}" = "x" ];then
+    if [ x"${1#--/}" = "x" ];then
         set_colors
         usage
         exit 0
     else
         do_trap
-        set_vars "${@}" 
-        if [ x"${@}" = "x" ];then
+        set_vars "${@}"
+        if [ x"${1#--/}" = "x" ];then
             usage
-            exit 0 
+            exit 0
         elif [ x"${DSB_GENERATE_CONFIG}" != "x" ];then
             generate_configuration_file
             die_in_error "end_of_scripts"
@@ -914,19 +957,15 @@ do_main() {
 
 #################### POSTGRESQL
 pg_dumpall_() {
-    runas "${PG_DUMPALL}" "${@}"
+    runcmd_as "${PG_DUMPALL}" "${@}"
 }
 
 pg_dump_() {
-    runas "${PG_DUMP}" "${@}"
+    runcmd_as "${PG_DUMP}" "${@}"
 }
 
 psql_() {
-    runas "${PSQL}" "${@}"
-}
-
-pg_user() {
-    echo "${PGUSER:-postgres}"
+    runcmd_as "${PSQL}" -w "${@}"
 }
 
 # REAL API IS HERE
@@ -934,7 +973,7 @@ postgresql_set_connection_vars() {
     export RUNAS="${RUNAS:-postgres}"
     export PGHOST="${HOST}"
     export PGPORT="${PORT}"
-    export PGUSER="${PGUSER:-${RUNAS}}"
+    export PGUSER="$(db_user)"
     export PGPASSWORD="${PASSWORD}"
     if [ x"${PGHOST}" = "xlocalhost" ]; then
         PGHOST=
@@ -965,43 +1004,116 @@ postgresql_set_vars() {
 
 postgresql_check_connectivity() {
     who="$(whoami)"
-    pgu="$(pg_user)"
-    psql_ --username="${pgu}" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
-    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS("$RUNAS") in $DSB_CONF_FILE"
+    pgu="$(db_user)"
+    psql_ --username="$(db_user)" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
+    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS("$(runas)") in $DSB_CONF_FILE"
 }
 
 postgresql_get_all_databases() {
-    LANG=C LC_ALL=C psql_ --username=${PGUSER:-postgres} ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
+    LANG=C LC_ALL=C psql_ --username="$(db_user)" ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
 }
 
 postgresql_dumpall() {
-    pg_dumpall_ $OPTALL > "${2}"
+    pg_dumpall_ --username="$(db_user)" $OPTALL > "${2}"
 }
 
 postgresql_dump() {
-    pg_dump_ $OPT "${1}" > "${2}"
+    pg_dump_ --username="$(db_user)" $OPT "${1}" > "${2}"
 }
 
 #################### MYSQL
+# REAL API IS HERE
+mysql__() {
+    runcmd_as "${MYSQL}" "${@}"
+}
+
+mysqldump__() {
+    runcmd_as "${MYSQLDUMP}" "${@}"
+}
+
+mysqldump_() {
+    mysqldump__ "-u$(db_user)" "$@"
+}
+
+mysql_() {
+    mysql__ "-u$(db_user)" "$@"
+}
+
+mysql_set_connection_vars() {
+    export MYSQL_HOST="${HOST:-localhost}"
+    export MYSQL_TCP_PORT="${PORT:-3306}"
+    export MYSQL_PWD="${PASSWORD}"
+    if [ x"${MYSQL_HOST}" = "xlocalhost" ];then
+        echo -e "$MYSQL_SOCK_PATHES"|\
+            while read path
+            do
+                export MYSQL_HOST="127.0.0.1"
+                export MYSQL_UNIX_PORT="${path}"
+            done
+    fi
+    if [ -e "${MYSQL_UNIX_PORT}" ];then
+        log "Using mysql socket: ${path}"
+    fi
+}
+
+mysql_set_vars() {
+    if [ x"${MYSQLDUMP_AUTOCOMMIT}" = x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --no-autocommit"
+    fi
+    if [ x"${MYSQLDUMP_NO_SINGLE_TRANSACTION}" = x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --single-transaction"
+    fi
+    if [ x"${MYSQLDUMP_COMPLETEINSERTS}" != x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --complete-insert"
+    else
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --extended-insert"
+    fi
+    if [ x"${MYSQLDUMP_LOCKTABLES}" = x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --lock-tables=false"
+    fi
+    MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --routines  --lock-tables=false --quote-names --opt --debug-info"
+    MYSQLDUMP_OPTS="${MYSQLDUMP_OPTS:-"${MYSQLDUMP_OPTS_COMMON}"}"
+    MYSQLDUMP_ALL_OPTS="${MYSQLDUMP_ALL_OPTS:-"${MYSQLDUMP_OPTS_COMMON} --all-databases --no-data"}"
+    if [ x"${DBNAMES}" = "xall" ]; then
+        DBNAMES=${ALL_DBNAMES}
+        for exclude in ${DBEXCLUDE};do
+            DBNAMES=$(echo ${DBNAMES} | sed "s/\b${exclude}\b//g")
+        done
+    fi
+    if [ x"${DBNAMES}" = "xall" ]; then
+        die "${BACKUP_TYPE}: could not get all databases"
+    fi
+    for i in "mysql::${MYSQL}" "mysqldump::${MYSQLDUMP}";do
+        var="$(echo ${i}|awk -F:: '{print $1}')"
+        bin="$(echo ${i}|awk -F:: '{print $2}')"
+        if  [ ! -e "${bin}" ];then
+            die "missing ${var}"
+        fi
+    done
+}
+
 mysql_check_connectivity() {
     who="$(whoami)"
-    pgu="$(pg_user)"
-    psql_ --username="${pgu}" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
-    die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS in $DSB_CONF_FILE"
+    pgu="$(db_user)"
+    echo "select 1"|mysql_ information_schema&> /dev/null
+    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS &\DBUSER in $DSB_CONF_FILE"
 }
 
 mysql_get_all_databases() {
-    LANG=C LC_ALL=C psql_ --username=${PGUSER:-postgres} ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
+    echo "select schema_name from SCHEMATA;"|mysql_ -N information_schema 2>/dev/null
+    die_in_error "Could not get mysql databases"
 }
 
 mysql_dumpall() {
-    LAST_BACKUP_STATUS=""
-    /bin/true
+    echo "mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}""
+    mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}"
 }
 
 mysql_dump() {
-    pg_dump_ $OPT "${1}" > "${2}"
+    echo "mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}""
+    mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}"
 }
+
 #################### MAIN
 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
     do_main "${@}"
