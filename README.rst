@@ -8,7 +8,7 @@ Backup Script for various databases
 Badges
 ------
 
-.. image:: https://secure.travis-ci.org/kiorky/db_smart_backup.png
+.. image:: https://travis-ci.org/kiorky/db_smart_backup.png
     :target: http://travis-ci.org/kiorky/db_smart_backup
 
 Supported databases
