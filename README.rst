@@ -19,7 +19,7 @@ Supported databases
 Why another tool ?
 --------------------
 - There are great tools out there, but they are not fitting to our needs and
-  knwoledge, and some of them did not have much tests, sorry.
+  knowledge, and some of them did not have much tests, sorry.
 - We just wanted a simple bash script, and using dumps (even in custom format
   for postgres) but just snapshots. So for example, postres PITR wal were not an
   option eliminating btw barman & pg_rman. All the other shell scripts including
