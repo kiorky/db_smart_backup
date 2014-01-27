@@ -120,7 +120,12 @@ generate_configuration_file() {
 #MYSQLDUMP_COMPLETEINSERTS="1"
 # do we disable mysqldump --lock-tables=false
 #MYSQLDUMP_LOCKTABLES=""
-
+# set to add extra dumps info
+#MYSQLDUMP_DEBUG=""
+# set to disable dump routines
+#MYSQLDUMP_NOROUTINES=""
+# do we use ssl to connect
+MYSQL_USE_SSL=""
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -863,17 +868,16 @@ set_vars() {
     OPTALL="${OPTALL:-"--globals-only"}"
 
     ######### MYSQL
+    MYSQL_USE_SSL="${MYSQL_USE_SSL:-}"
     MYSQL_SOCK_PATHS="${MYSQL_SOCK_PATHS:-"/var/run/mysqld/mysqld.sock"}"
     MYSQL="${MYSQL:-$(which mysql 2>/dev/null)}"
     MYSQLDUMP="${MYSQLDUMP:-$(which mysqldump 2>/dev/null)}"
-    # do we disable mysqldump --single-transaction0
     MYSQLDUMP_NO_SINGLE_TRANSACTION="${MYSQLDUMP_NO_SINGLE_TRANSACTION:-}"
-    # set to enable autocommit
     MYSQLDUMP_AUTOCOMMIT="${MYSQLDUMP_AUTOCOMMIT:-1}"
-    # set to enable complete inserts (true by default, disabling enable extended inserts)
     MYSQLDUMP_COMPLETEINSERTS="${MYSQLDUMP_COMPLETEINSERTS:-1}"
-    # do we disable mysqldump --lock-tables=false
     MYSQLDUMP_LOCKTABLES="${MYSQLDUMP_LOCKTABLES:-}"
+    MYSQLDUMP_DEBUG="${MYSQLDUMP_DEBUG:-}"
+    MYSQLDUMP_NOROUTINES="${MYSQLDUMP_NOROUTINES:-}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"
@@ -1024,11 +1028,11 @@ postgresql_dump() {
 #################### MYSQL
 # REAL API IS HERE
 mysql__() {
-    runcmd_as "${MYSQL}" "${@}"
+    runcmd_as "${MYSQL}"    $(mysql_common_args) "${@}"
 }
 
 mysqldump__() {
-    runcmd_as "${MYSQLDUMP}" "${@}"
+    runcmd_as "${MYSQLDUMP}" $(mysql_common_args) "${@}"
 }
 
 mysqldump_() {
@@ -1071,7 +1075,13 @@ mysql_set_vars() {
     if [ x"${MYSQLDUMP_LOCKTABLES}" = x"" ];then
         MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --lock-tables=false"
     fi
-    MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --routines  --lock-tables=false --quote-names --opt --debug-info"
+    if [ x"${MYSQLDUMP_DEBUG}" != x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --debug-info"
+    fi
+    if [ x"${MYSQLDUMP_NOROUTINES}" = x"" ];then
+        MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --routines"
+    fi
+    MYSQLDUMP_OPTS_COMMON="${MYSQLDUMP_OPTS_COMMON} --quote-names --opt"
     MYSQLDUMP_OPTS="${MYSQLDUMP_OPTS:-"${MYSQLDUMP_OPTS_COMMON}"}"
     MYSQLDUMP_ALL_OPTS="${MYSQLDUMP_ALL_OPTS:-"${MYSQLDUMP_OPTS_COMMON} --all-databases --no-data"}"
     if [ x"${DBNAMES}" = "xall" ]; then
@@ -1092,6 +1102,14 @@ mysql_set_vars() {
     done
 }
 
+mysql_common_args() {
+    args=""
+    if [ x"${MYSQL_USE_SSL}" ];then
+        args="${args} --ssl"
+    fi
+    echo "${args}"
+}
+
 mysql_check_connectivity() {
     who="$(whoami)"
     pgu="$(db_user)"
@@ -1105,12 +1123,10 @@ mysql_get_all_databases() {
 }
 
 mysql_dumpall() {
-    echo "mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}""
     mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}"
 }
 
 mysql_dump() {
-    echo "mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}""
     mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}"
 }
 
