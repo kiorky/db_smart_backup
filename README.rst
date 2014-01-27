@@ -38,7 +38,7 @@ So main features/requirements are:
       is bash in posix mode)
     - Postgresql / Mysql support for simple database and privileges
       dumps
-    - Enoughtly unit tested
+    - Enougthly unit tested
     - XZ compression
     - Easily extensible to add another backup type / Generic backups methods
     - Optional hooks at each stage of the process addable via configuration
