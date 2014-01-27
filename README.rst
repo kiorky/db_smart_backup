@@ -23,7 +23,7 @@ Why another tool ?
 - We just wanted a simple bash script, and using dumps (even in custom format
   for postgres) but just snapshots. So for example, postres PITR wal were not an
   option eliminating btw barman & pg_rman. All the other shell scripts including
-  automysqlbackup/autopostgresql were not fitting exactly all the feature we
+  automysqlbackup/autopostgresql were not fitting exactly all the features we
   wanted and some were just too bash complicated for our little own brains.
 - We wanted hooks to react on each backup stage, those hooks can be in another
   language, this is up to the user.
@@ -32,15 +32,16 @@ Why another tool ?
   information, read the sources luke.
 
 
-So main features are:
+So main features/requirements are:
 
     - Posix shell compliant (goal, but not that tested, the really tested one
       is bash in posix mode)
     - Postgresql / Mysql support for simple database and privileges
       dumps
-    - Extensible
-    - Generic backups methods
-    - Optional hooks at each stage of the process
+    - XZ compression
+    - Easily extensible to add another backup type / Generic backups methods
+    - Optional hooks at each stage of the process addable via configuration
+      (bash functions to uncomment)
 
 
 Installation
@@ -79,13 +80,17 @@ The great things
     POSTGRESQL/
      DBNAME/
       dumps/
-        DBNAME_20xx0101.sql.compressed  <- 01/01/20xx
-        DBNAME_20xx0102.sql.compressed
-        DBNAME_20xx0103.sql.compressed
-        DBNAME_20xx0107.sql.compressed
-        DBNAME_20xx0108.sql.compressed
-        DBNAME_20xx3101.sql.compressed
-        DBNAME_20xx0202.sql.compressed
+        DBNAME_20xx0101_01-01-01.sql.compressed  <- 01/01/20xx
+        DBNAME_20xx0102_01-01-01.sql.compressed
+        DBNAME_20xx0103_01-01-01.sql.compressed
+        DBNAME_20xx0107_01-01-01.sql.compressed
+        DBNAME_20xx0108_01-01-01.sql.compressed
+        DBNAME_20xx3101_01-01-01.sql.compressed
+        DBNAME_20xx0202_01-01-01.sql.compressed
+      lastsnapshots/
+        DBNAME_20xx0101_01-01-01.sql.compressed
+        DBNAME_20xx0102_01-01-01.sql.compressed
+        DBNAME_20xx0202_01-01-01.sql.compressed
       monthly/
         20xx_01_DBNAME_20xx0101.sql.compressed -> /fullpath/DBNAME/dumps/DBNAME_20xx0101.sql.compressed
         20xx_02_DBNAME_20xx0201.sql.compressed -> /fullpath/DBNAME/dumps/DBNAME_20xx0202.sql.compressed
@@ -99,8 +104,12 @@ The great things
 
 - Indeed:
 
-    - First thing to do after after a backup is to look if a folder has more than the configured backups and clean the oldest first.
-    - Then we will just have to prune hardlinks where linked count is stricly inferior to 2
+    - First thing to do after after a backup is to look if a folder has more than the
+      configured backups per each type of rotation (month, week, days, snapshots)
+      and clean the oldest first.
+    - Then we will just have to prune hardlinks where linked count is stricly inferior to 2,
+      meaning that no one of the retention policies link this backup anymore. It
+      is what we can call an orphan and is willing to be pruned.
     - Indeed, this means that our backups are only in the dumps folder.
 
 PostGRESQL specificities
@@ -130,15 +139,15 @@ Options
 - Read the script header to know what can do each option
 - You ll need to tweak at least:
 
-    - the database identifiers
-    - the backup root location
-    - what to backup
-    - which types to do (maybe only postgresl)
+    - The database identifiers
+    - The backup root location
+    - Which type of backup to do (maybe only postgresl)
+    - The retention policy
 
 
 Backup Rotation..
 ------------------
-We use hardlinks, be aware that it may have filesystem limits:
+We use hardlinks to achieve that but be aware that it may have filesystem limits:
     - number of databases backed up (a lot if every possible anymay on modern filesystems (2^32 hardlinks)
       and count something for the max like **366x2+57+12** for a year and a db.
     - and all subdirs should be on the same mounted point where the backup dir
