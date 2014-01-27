@@ -125,8 +125,8 @@ Hooks
   another script in another language.
 
   - after the backup program starts: **pre_backup_hook**
-  - after the global backup: **post_global_backup_failure_hook**
   - after the global backup(failure): **postglobalbackup_hook**
+  - after the global backup: **post_global_backup_failure_hook**
   - after specific db backup: **post_dbbackup_hook**
   - after specific db backup(failure): **post_db_backup_failure_hook**
   - after the backups rotation: **post_rotate_hook**
