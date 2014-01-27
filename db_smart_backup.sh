@@ -42,9 +42,8 @@ generate_configuration_file() {
 
 # HOW MANY BACKUPS TO KEEP & LEVEL
 # How many snapshots to keep (lastlog for dump)
-#KEEP_LASTSNAPSHOTS=24
 # How many per day
-#KEEP_LAST=24
+#KEEP_LASTS=24
 #KEEP_DAYS=14
 #KEEP_WEEKS=8
 #KEEP_MONTHES=12
@@ -73,9 +72,6 @@ generate_configuration_file() {
 
 # List of DBNAMES for Daily/Weekly Backup e.g. "DB1 DB2 DB3"
 #DBNAMES="all"
-
-# Include CREATE DATABASE in backup?
-#CREATE_DATABASE=yes
 
 # List of DBNAMES to EXLUCDE if DBNAMES are set to all (must be in " quotes)
 #DBEXCLUDE=""
@@ -119,7 +115,7 @@ generate_configuration_file() {
 # set to disable dump routines
 #MYSQLDUMP_NOROUTINES=""
 # do we use ssl to connect
-MYSQL_USE_SSL=""
+#MYSQL_USE_SSL=""
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -171,6 +167,7 @@ MYSQL_USE_SSL=""
 # Function to run after the recap mail emission
 #failure_hook() {
 #}
+# vim:set ft=sh:
 EOF
 }
 
@@ -836,7 +833,6 @@ set_vars() {
     DBUSER="" # see db_user function
     PASSWORD="${PASSWORD:-}"
     DBNAMES="${DBNAMES:-all}"
-    CREATE_DATABASE=${CREATE_DATABASE:-yes}
     DBEXCLUDE="${DBEXCLUDE:-}"
 
     ######## Mail setup
