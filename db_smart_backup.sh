@@ -81,20 +81,14 @@ generate_configuration_file() {
 #DBEXCLUDE=""
 
 ######## Mail setup
-# What would you like to be mailed to you?
-# - log   : send only log file
-# - files : send log file and sql files as attachments (see docs)
-# - stdout : will simply output the log to the screen if run manually.
-#MAILCONTENT="stdout"
-
-# Set the maximum allowed email size in k. (4000 = approx 5MB email [see docs])
-#MAXATTSIZE="4000"
-
 # Email Address to send mail to? (user@domain.com)
 #MAILADDR="root@localhost"
 
 # this server nick name
 #MAIL_THISSERVERNAME="`hostname -f`"
+
+# set to disable mail
+#DISABLE_MAIL=""
 
 ######### Postgresql
 # binaries path
@@ -460,17 +454,8 @@ do_global_backup() {
 
 do_sendmail() {
     debug "do_sendmail"
-    if [ x"${MAILCONTENT}" = "xfiles" ]; then
-        #Get backup size
-        ATTSIZE=`du -c ${DSB_BACKUPFILES} | grep "[[:digit:][:space:]]total$" |sed s/\s*total//`
-        if [ ${MAXATTSIZE} -ge ${ATTSIZE} ];then
-            DSB_BACKUPFILES=`log "${DSB_BACKUPFILES}" | sed -e "s# # -a #g"`    #enable multiple attachments
-            mutt -s "PostgreSQL Backup Log and SQL Files for ${PGHOST} - ${DATE}" ${DSB_BACKUPFILES} ${MAILADDR} < ${DSB_LOGFILE}        #send via mutt
-        else
-            cat "${DSB_LOGFILE}" | mail -s "WARNING! - PostgreSQL Backup exceeds set maximum attachment size on ${PGHOST} - ${DATE}" ${MAILADDR}
-        fi
-    elif [ x"${MAILCONTENT}" = "xlog" ];then
-        cat "${DSB_LOGFILE}" | mail -s "PostgreSQL Backup Log for ${MAIL_THISSERVERNAME} - ${DATE}" ${MAILADDR}
+    if [ x"${DISABLE_MAIL}" = "x" ]; then
+        cat "${DSB_LOGFILE}" | mail -s "${__NAME__}  Backup Log for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
     fi
 }
 
