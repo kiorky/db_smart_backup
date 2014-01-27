@@ -234,23 +234,25 @@ echo $COMPRESSED_NAME
         ]:
             self.assertTrue(re.search(i, ret, re.M | re.U), i)
 
-    def test_runas(self):
+    def test_arunas(self):
         TEST = '''
+outputDir="{dir}/spaces"
 export DB_SMART_BACKUP_AS_FUNCS="1" RUNAS="postgres" PSQL="psql"
-mkdir -p  "$outputDir/WITH QUOTES/a b e"
-mkdir -p  "$outputDir/WITH QUOTES/cc dd ff"
+mkdir -p  "$outputDir/WITH QUOTES"
+touch "$outputDir/WITH QUOTES/"{{a,b,e}}
+touch "$outputDir/WITH QUOTES/"{{cc,dd,ff}}
 chown -Rf postgres  "$outputDir/WITH QUOTES"
 export RUNAS="postgres"
-ret=$(runas 'echo $(whoami):$(ls "'"$outputDir"'/WITH QUOTES")')
-echo $ret
+runcmd_as whoami
+runcmd_as ls "$outputDir/WITH QUOTES"
 export RUNAS="root"
-ret=$(runas 'echo $(whoami):$(ls "'"$outputDir"'/WITH QUOTES")')
-echo $ret
+runcmd_as whoami
+runcmd_as ls "$outputDir/WITH QUOTES"
 '''
         ret = self.exec_script(TEST)
         self.assertEqual(
-            'postgres:a b e cc dd ff\n'
-            'root:a b e cc dd ff\n', ret)
+            'postgres\na\nb\ncc\ndd\ne\nff\n'
+            'root\na\nb\ncc\ndd\ne\nff\n', ret)
 
     def test_monkeypatch(self):
         TEST = '''

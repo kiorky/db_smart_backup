@@ -35,7 +35,7 @@ generate_configuration_file() {
 #BACKUP_TYPE=mysql
 
 # Backup directory location e.g /backups
-#TOP_BACKUPDIR="/var/pgbackups"
+#TOP_BACKUPDIR="/var/db_smart_backup"
 
 # do also global backup (use by postgresql to save roles/groups and only that
 #DO_GLOBAL_BACKUP="1"
@@ -264,7 +264,7 @@ runcmd_as() {
     shift
     args=$(quote_all "${@}")
     if [ x"$(runas)" = "x" ] || [ x"$(runas)" = "x$(whoami)" ];then
-        "${bin}" "${@}"
+        ${bin} "${@}"
     else
         su ${RUNAS} -c "${bin} ${args}"
     fi
@@ -551,7 +551,7 @@ do_post_backup() {
     debug "do_post_backup"
     log "Total disk space used for backup storage.."
     log "  Size   - Location:"
-    wrap_log du -sh "$(get_backupdir)"/*
+    wrap_log du -shc "$(get_backupdir)"/*
     log_rule
     log "Backup end time: ${YELLOW}$(readable_date)${NORMAL}"
     log_rule
@@ -832,7 +832,7 @@ set_vars() {
     NO_COLOR="${NO_COLOR:-}"
     COMP=${COMP:-xz}
     BACKUP_TYPE=${BACKUP_TYPE:-}
-    TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/pgbackups}"
+    TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/db_smart_backup}"
     DO_GLOBAL_BACKUP="1"
     KEEP_LASTS="${KEEP_LASTS:-24}"
     KEEP_DAYS="${KEEP_DAYS:-14}"
