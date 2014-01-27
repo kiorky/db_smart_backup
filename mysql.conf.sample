@@ -1,0 +1,2 @@
+BACKUP_TYPE=mysql
+PASSWORD="root"
