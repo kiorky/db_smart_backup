@@ -119,14 +119,14 @@ The great things
 
 Backup types
 -------------
-PostGRESQL & mysql specificities
+PostGRESQL & MySQL specificities
 ++++++++++++++++++++++++++++++++++++++++
 - We use traditionnal postgresql environment variables to set the host, port, password and user to set at backup
   time
 
-- For postgresql, you will certainly have to set only the BACKUP_TYPE to
+- For PostGRESQL, you will certainly have to set only the BACKUP_TYPE to
   postgresl
-- For Mysql you may have only to input the password
+- For MySQL you may have only to input the password
 
 Add another backup type
 ++++++++++++++++++++++++
