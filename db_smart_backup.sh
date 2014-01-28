@@ -603,7 +603,7 @@ do_rotate() {
                 elif [ x"${chronodir}" = "xlastsnapshots" ];then
                     to_keep=${KEEP_LASTS:-2}
                 else
-                    to_keep="65635" # int limit
+                    to_keep="65535" # int limit
                 fi
                 i=0
                 get_sorted_files "${subdir}" | while read nfic;do
