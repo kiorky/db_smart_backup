@@ -251,6 +251,7 @@ quote_all() {
 }
 
 runcmd_as() {
+    cd "${RUNAS_DIR:-/}"
     bin="${1}"
     shift
     args=$(quote_all "${@}")
@@ -349,6 +350,9 @@ get_backupdir() {
     if [  x"${BACKUP_TYPE}" = "xpostgresql" ];then
         host="${HOST}"
         if [ x"${HOST}" = "x" ] || [ x"${PGHOST}" = "x" ];then
+            host="localhost"
+        fi
+        if [ -e $host ];then
             host="localhost"
         fi
         dir="$dir/$host"
@@ -720,7 +724,7 @@ do_backup() {
     log_rule
     log "DATABASES BACKUP"
     log_rule
-    for db in ${DBNAMES};do
+    for db in ${BACKUP_DB_NAMES};do
         do_db_backup $db
         if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
             do_hook "Postdbbackup: ${db}  command output" "post_db_backup_hook"
@@ -912,6 +916,7 @@ set_vars() {
             "${BACKUP_TYPE}_set_vars"
         fi
     fi
+    BACKUP_DB_NAMES="${DBNAMES}"
     # Re source to reoverride any core overriden variable
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
@@ -994,12 +999,12 @@ postgresql_set_vars() {
 postgresql_check_connectivity() {
     who="$(whoami)"
     pgu="$(db_user)"
-    psql_ --username="$(db_user)" ${PGHOST} -c "select * from pg_roles" -d postgres >/dev/null
+    psql_ --username="$(db_user)" -c "select * from pg_roles" -d postgres >/dev/null
     die_in_error "Cant connect to postgresql server with ${pgu} as ${who}, did you configured \$RUNAS("$(runas)") in $DSB_CONF_FILE"
 }
 
 postgresql_get_all_databases() {
-    LANG=C LC_ALL=C psql_ --username="$(db_user)" ${PGHOST} -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
+    LANG=C LC_ALL=C psql_ --username="$(db_user)"  -l -A -F: | sed -ne "/:/ { /Name:Owner/d; /template0/d; s/:.*$//; p }"
 }
 
 postgresql_dumpall() {
@@ -1099,7 +1104,7 @@ mysql_check_connectivity() {
     who="$(whoami)"
     pgu="$(db_user)"
     echo "select 1"|mysql_ information_schema&> /dev/null
-    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS &\DBUSER in $DSB_CONF_FILE"
+    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS \$PASSWORD \DBUSER in $DSB_CONF_FILE"
 }
 
 mysql_get_all_databases() {
