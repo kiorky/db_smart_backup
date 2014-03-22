@@ -1,6 +1,7 @@
 =====================================================
-Backup Script for various databases
+Backup Script for various databases: 
 =====================================================
+Simple dump based backup with intelligent rotation and hooks.
 
 .. contents::
 
@@ -20,13 +21,13 @@ Why another tool ?
 --------------------
 - There are great tools out there, but they are not fitting to our needs and
   knowledge, and some of them did not have much tests, sorry.
-- We just wanted a simple bash script, and using dumps (even in custom format
-  for postgres) but just snapshots. So for example, postres PITR wal were not an
-  option eliminating btw barman & pg_rman. All the other shell scripts including
-  automysqlbackup/autopostgresql were not fitting exactly all the features we
+- We just wanted a simple bash script, and using **dumps** (even in custom format
+  for postgres) but just snapshots. So for example, postgreSQL PITR wal were not an
+  option eliminating btw *barman* & *pg_rman*. All the other shell scripts including
+  *automysqlbackup*/*autopostgresql* were not fitting exactly all the features we
   wanted and some were just too bash complicated for our little own brains.
 - We wanted hooks to react on each backup stage, those hooks can be in another
-  language, this is up to the user.
+  language, this is up to the user (very usefull for monitoring stuff).
 - We want a generic script for any database, providing that you add support on
   it, this consists just on writing a 'global' and a 'dump' function. For more
   information, read the sources luke.
@@ -36,13 +37,17 @@ So main features/requirements are:
 
     - Posix shell compliant (goal, but not that tested, the really tested one
       is bash in posix mode)
-    - Postgresql / Mysql support for simple database and privileges
+    - **PostgreSQL / MySQL support** for simple database and privileges
       dumps
-    - Enougthly unit tested
-    - XZ compression
-    - Easily extensible to add another backup type / Generic backups methods
-    - Optional hooks at each stage of the process addable via configuration
+    - Enougthly unit **tested**
+    - XZ **compression** if available
+    - Easily **extensible** to add another backup type / Generic backups methods
+    - **Optional hooks** at each stage of the process addable via configuration
       (bash functions to uncomment)
+    - **Keep a fixed number of dumps**, recent ones, old ones, and in a smart way.
+      More on that later on this document. But for example the default is to keep
+      the last 24 dumps, then 14 days (1 per day), 8 weeks (1 per week) and 12 
+      months (1 per month).
 
 
 Installation
@@ -112,20 +117,37 @@ The great things
     - Then we will just have to prune hardlinks where linked count is stricly inferior to 2,
       meaning that no one of the retention policies link this backup anymore. It
       is what we can call an orphan and is willing to be pruned.
-    - Indeed, this means that our backups are only in the dumps folder.
+    - Indeed, this means that **our backups are only in the dumps folder**.
 
+- How do I see that other directories contains only hard links from dump directory?
+
+    - You can see the hard links with ls in two ways. Using `ls -i` to get the 
+      real inode number in first col or `ls -l` to get the hard link counters.
+::
+
+    # ls -il /var/backup/postgresql/localhost/foobar/dumps/
+    total 13332
+    14044 -rw-r----- 5 root root 1237208 22 mars  16:19 foobar_2014-03-22_16-19-34.sql
+    14049 -rw-r----- 2 root root 1237208 22 mars  16:25 foobar_2014-02-22_11-25-53.sql
+    14054 -rw-r----- 2 root root 1237208 22 mars  16:27 foobar_2014-01-22_15-27-22.sql
+    (...)
+    # ls -il /var/backup/postgresql/localhost/foobar/weekly/
+    total 1212
+    14044 -rw-r----- 5 root root 1237208 22 mars  16:19 foobar_2014_12.sql
+    ___^ inode       ^
+    _________________^ here we see the hard link counter on this file
 
 
 
 Backup types
 -------------
-PostGRESQL & MySQL specificities
+PostgreSQL & MySQL specificities
 ++++++++++++++++++++++++++++++++++++++++
-- We use traditionnal postgresql environment variables to set the host, port, password and user to set at backup
+- We use traditionnal postgreSQL environment variables to set the host, port, password and user to set at backup
   time
 
-- For PostGRESQL, you will certainly have to set only the BACKUP_TYPE to
-  postgresl
+- For PostgreSQL, you will certainly have to set only the BACKUP_TYPE to
+  postgresql
 - For MySQL you may have only to input the password
 
 Add another backup type
@@ -134,12 +156,12 @@ You need to first read the implementations for **mysql** and **postgresql**, tho
 really simple, then follow the next guide (you do not need to make the script
 call your functions, they are introspected):
 
-    - Add a function **yourtype_set_connection_vars** to set any neccesary extra global variable needed
+    - Add a function **yourtype_set_connection_vars** to set any necessary extra global variable needed
       at the connect phase to your service
     - Add a function **yourtype_check_connectivity** that exit in error if the
       connexion is not possible and die in error else (use the **die_in_error**
       function)
-    - Add a function **yourtype_set_vars** to set any neccesary extra global variable needed
+    - Add a function **yourtype_set_vars** to set any necessary extra global variable needed
       to handle your service
     - Add a function **yourtype_get_all_databases** that return a space separated
       list of your database dbs.
@@ -153,12 +175,12 @@ call your functions, they are introspected):
     - Add what is needed to load the configuration in the default configuration
       file in the **generate_configuration_file** method
     - Hack the defaults and variables in **set_vars**, the same way, if
-      neccessary.
+      necessary.
 
 Hooks
 ---------
-- We provide a hook mecanism to let you configure custom code at each stage of
-  the backup program. For this, you just need to uncomment the relevant out in
+- We provide a hook mechanism to let you configure custom code at each stage of
+  the backup program. For this, you just need to uncomment the relevant part in
   your configuration file and implement whatever code you want, and even call
   another script in another language.
 
@@ -178,28 +200,28 @@ Hooks
 
 Options
 -----------
-- Read the script header to know what can do each option
-- You ll need to tweak at least:
+- Read the script header to know what each option can do
+- You'll need to tweak at least:
 
     - The database identifiers
-    - The backup root location
-    - Which type of backup to do (maybe only postgresl)
-    - The retention policy
+    - The backup root location (/var/backup/<type> by default)
+    - Which type of backup to do (maybe only postgresql)
+    - The retention policy (there's a default one)
 
 
 Backup Rotation..
 ------------------
 We use hardlinks to achieve that but be aware that it may have filesystem limits:
-    - number of databases backed up (a lot if every possible anymay on modern filesystems (2^32 hardlinks)
+    - number of databases backed up (a lot if every possible anyway on modern filesystems (2^32 hardlinks)
       and count something for the max like **366x2+57+12** for a year and a db.
-    - and all subdirs should be on the same mounted point where the backup dir
+    - and all subdirs should be on the same mounted point than the **dumps** directory.
 
 Default policy
 ++++++++++++++
 - We keep the **24** last done dumps
 - We keep **14** days left
 - We keep 1 backup per week for the last **8** weeks
-- We keep 1 backup per month for the last **12** monthes
+- We keep 1 backup per month for the last **12** months
 
 Please Note!!
 --------------
