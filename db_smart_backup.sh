@@ -844,11 +844,18 @@ set_vars() {
     DBNAMES="${DBNAMES:-all}"
     DBEXCLUDE="${DBEXCLUDE:-}"
 
+    ######## hostname
+    GET_HOSTNAME=`hostname -f`
+    if [ x"${GET_HOSTNAME}" = x"" ]; then
+        GET_HOSTNAME=`hostname -s`
+    fi
+    
     ######## Mail setup
     MAILCONTENT="${MAILCONTENT:-stdout}"
     MAXATTSIZE="${MAXATTSIZE:-4000}"
     MAILADDR="${MAILADDR:-root@localhost}"
-    MAIL_SERVERNAME="${MAIL_SERVERNAME:-`hostname -f`}"
+    
+    MAIL_SERVERNAME="${MAIL_SERVERNAME:-${GET_HOSTNAME}}"
 
     ######### Postgresql
     PSQL="${PSQL:-"$(which psql 2>/dev/null)"}"
@@ -871,7 +878,7 @@ set_vars() {
 
     ######## Mails
     DISABLE_MAIL="${DISABLE_MAIL:-}"
-    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-`hostname -f`}"
+    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-${GET_HOSTNAME}}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"
