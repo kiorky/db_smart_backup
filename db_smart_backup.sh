@@ -172,7 +172,7 @@ EOF
 }
 
 fn_exists() {
-    echo $(LC_ALL=C LANG=C type ${1} 2>&1 | head -n1 | grep -q "is a function";echo $?)
+    echo $(LC_ALL=C;LANG=C;type ${1} 2>&1 | head -n1 | grep -q "is a function";echo $?)
 }
 
 
