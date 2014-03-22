@@ -172,7 +172,7 @@ EOF
 }
 
 fn_exists() {
-    echo $(LC_ALL=C LANG=C type ${1} 2>&1 | head -n1 | grep -q "is a function";echo $?)
+    echo $(LC_ALL=C;LANG=C;type ${1} 2>&1 | head -n1 | grep -q "is a function";echo $?)
 }
 
 
@@ -456,7 +456,12 @@ do_global_backup() {
 do_sendmail() {
     debug "do_sendmail"
     if [ x"${DISABLE_MAIL}" = "x" ]; then
-        cat "${DSB_LOGFILE}" | mail -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
+        MAILER="${MAILER:-"$(which mail 2>/dev/null)"}"
+        if [ x"${MAILER}" = x"" ]; then
+            echo "No mail command found."
+        else
+            cat "${DSB_LOGFILE}" | ${MAILER} -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
+        fi
     fi
 }
 
@@ -839,11 +844,18 @@ set_vars() {
     DBNAMES="${DBNAMES:-all}"
     DBEXCLUDE="${DBEXCLUDE:-}"
 
+    ######## hostname
+    GET_HOSTNAME=`hostname -f`
+    if [ x"${GET_HOSTNAME}" = x"" ]; then
+        GET_HOSTNAME=`hostname -s`
+    fi
+    
     ######## Mail setup
     MAILCONTENT="${MAILCONTENT:-stdout}"
     MAXATTSIZE="${MAXATTSIZE:-4000}"
     MAILADDR="${MAILADDR:-root@localhost}"
-    MAIL_SERVERNAME="${MAIL_SERVERNAME:-`hostname -f`}"
+    
+    MAIL_SERVERNAME="${MAIL_SERVERNAME:-${GET_HOSTNAME}}"
 
     ######### Postgresql
     PSQL="${PSQL:-"$(which psql 2>/dev/null)"}"
@@ -866,7 +878,7 @@ set_vars() {
 
     ######## Mails
     DISABLE_MAIL="${DISABLE_MAIL:-}"
-    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-`hostname -f`}"
+    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-${GET_HOSTNAME}}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"
