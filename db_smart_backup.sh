@@ -456,7 +456,12 @@ do_global_backup() {
 do_sendmail() {
     debug "do_sendmail"
     if [ x"${DISABLE_MAIL}" = "x" ]; then
-        cat "${DSB_LOGFILE}" | mail -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
+        MAILER="${MAILER:-"$(which mail 2>/dev/null)"}"
+        if [ x"${MAILER}" = x"" ]; then
+            echo "No mail command found."
+        else
+            cat "${DSB_LOGFILE}" | ${MAILER} -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
+        fi
     fi
 }
 
