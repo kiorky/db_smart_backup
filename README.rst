@@ -2,6 +2,7 @@
 Backup Script for various databases: 
 =====================================================
 Simple dump based backup with intelligent rotation and hooks.
+Supports with battery included for mysql, mongodb & postgresql
 
 .. contents::
 
@@ -14,8 +15,9 @@ Badges
 
 Supported databases
 -------------------
+    - Mongodb
     - PostGRESQL
-    - MySQL (Work in progress)
+    - MySQL
 
 Why another tool ?
 --------------------

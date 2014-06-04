@@ -33,6 +33,7 @@ generate_configuration_file() {
 # one of: postgresql mysql
 #BACKUP_TYPE=postgresql
 #BACKUP_TYPE=mysql
+#BACKUP_TYPE=mongodb
 
 # Backup directory location e.g /backups
 #TOP_BACKUPDIR="/var/db_smart_backup"
@@ -386,10 +387,10 @@ link_into_dirs() {
     db="${1}"
     real_filename="${2}"
     real_zfilename="$(get_compressed_name "${real_filename}")"
-    daily_filename="$(get_backupdir)/${db}/daily/${db}_${YEAR}_${DOY}_${DATE}.sql"
-    lastsnapshots_filename="$(get_backupdir)/${db}/lastsnapshots/${db}_${YEAR}_${DOY}_${FDATE}.sql"
-    weekly_filename="$(get_backupdir)/${db}/weekly/${db}_${YEAR}_${W}.sql"
-    monthly_filename="$(get_backupdir)/${db}/monthly/${db}_${YEAR}_${MNUM}.sql"
+    daily_filename="$(get_backupdir)/${db}/daily/${db}_${YEAR}_${DOY}_${DATE}.${BACKUP_EXT}"
+    lastsnapshots_filename="$(get_backupdir)/${db}/lastsnapshots/${db}_${YEAR}_${DOY}_${FDATE}.${BACKUP_EXT}"
+    weekly_filename="$(get_backupdir)/${db}/weekly/${db}_${YEAR}_${W}.${BACKUP_EXT}"
+    monthly_filename="$(get_backupdir)/${db}/monthly/${db}_${YEAR}_${MNUM}.${BACKUP_EXT}"
     lastsnapshots_zfilename="$(get_compressed_name "${lastsnapshots_filename}")"
     daily_zfilename="$(get_compressed_name "${daily_filename}")"
     weekly_zfilename="$(get_compressed_name "$weekly_filename")"
@@ -421,7 +422,7 @@ do_db_backup_() {
     db="${1}"
     fun_="${2}"
     create_db_directories "${db}"
-    real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.sql"
+    real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.${BACKUP_EXT}"
     zreal_filename="$(get_compressed_name "${real_filename}")"
     adb="${YELLOW}${db}${NORMAL} "
     if [ x"${db}" = x"${GLOBAL_SUBDIR}" ];then
@@ -726,18 +727,20 @@ do_backup() {
             do_hook "Postglobalbackup(failure) command output" "post_global_backup_failure_hook"
         fi
     fi
-    log_rule
-    log "DATABASES BACKUP"
-    log_rule
-    for db in ${BACKUP_DB_NAMES};do
-        do_db_backup $db
-        if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
-            do_hook "Postdbbackup: ${db}  command output" "post_db_backup_hook"
-            DSB_BACKUP_IN_FAILURE="y"
-        else
-            do_hook "Postdbbackup: ${db}(failure)  command output" "post_db_backup_failure_hook"
-        fi
-    done
+    if [ "x${BACKUP_DB_NAMES}" != "x" ];then
+        log_rule
+        log "DATABASES BACKUP"
+        log_rule
+        for db in ${BACKUP_DB_NAMES};do
+            do_db_backup $db
+            if [ x"${LAST_BACKUP_STATUS}" = "xfailure" ];then
+                do_hook "Postdbbackup: ${db}  command output" "post_db_backup_hook"
+                DSB_BACKUP_IN_FAILURE="y"
+            else
+                do_hook "Postdbbackup: ${db}(failure)  command output" "post_db_backup_failure_hook"
+            fi
+        done
+    fi
 }
 
 mark_run_backup() {
@@ -849,12 +852,12 @@ set_vars() {
     if [ x"${GET_HOSTNAME}" = x"" ]; then
         GET_HOSTNAME=`hostname -s`
     fi
-    
+
     ######## Mail setup
     MAILCONTENT="${MAILCONTENT:-stdout}"
     MAXATTSIZE="${MAXATTSIZE:-4000}"
     MAILADDR="${MAILADDR:-root@localhost}"
-    
+
     MAIL_SERVERNAME="${MAIL_SERVERNAME:-${GET_HOSTNAME}}"
 
     ######### Postgresql
@@ -875,7 +878,9 @@ set_vars() {
     MYSQLDUMP_LOCKTABLES="${MYSQLDUMP_LOCKTABLES:-}"
     MYSQLDUMP_DEBUG="${MYSQLDUMP_DEBUG:-}"
     MYSQLDUMP_NOROUTINES="${MYSQLDUMP_NOROUTINES:-}"
-
+    # mongodb
+    MONGODB_PATH="${MONGODB_PATH:-"/var/lib/mongodb"}"
+    MONGODB_ARGS="${MONGODB_ARGS:-""}"
     ######## Mails
     DISABLE_MAIL="${DISABLE_MAIL:-}"
     MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-${GET_HOSTNAME}}"
@@ -928,6 +933,12 @@ set_vars() {
             "${BACKUP_TYPE}_set_vars"
         fi
     fi
+    if [ "x${BACKUP_TYPE}" = "xmongodb" ];then
+        BACKUP_EXT="tar"
+    else
+        BACKUP_EXT="sql"
+    fi
+
     BACKUP_DB_NAMES="${DBNAMES}"
     # Re source to reoverride any core overriden variable
     if [ -e "${DSB_CONF_FILE}" ];then
@@ -1131,6 +1142,43 @@ mysql_dumpall() {
 mysql_dump() {
     mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}"
 }
+
+
+#################### MONGODB
+# REAL API IS HERE
+mongodb_set_connection_vars() {
+    /bin/true
+}
+
+mongodb_set_vars() {
+    DBNAMES=""
+}
+
+mongodb_check_connectivity() {
+    test -d "${MONGODB_PATH}/journal"
+    die_in_error "no mongodb"
+}
+
+mongodb_get_all_databases() {
+    /bin/true
+}
+
+mongodb_dumpall() {
+    DUMPDIR="${2}.dir"
+    if [ ! -e ${DUMPDIR} ];then
+        mkdir -p "${DUMPDIR}"
+    fi
+    mongodump ${MONGODB_ARGS} --out "${DUMPDIR}"\
+        && die_in_error "mongodb dump failed" 
+    cd "${DUMPDIR}" &&  tar cf "${2}" .
+    die_in_error "mongodb tar failed"
+    rm -rf "${DUMPDIR}"
+}
+
+mongodb_dump() {
+    /bin/true
+}
+
 
 #################### MAIN
 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
