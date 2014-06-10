@@ -880,6 +880,8 @@ set_vars() {
     MYSQLDUMP_NOROUTINES="${MYSQLDUMP_NOROUTINES:-}"
     # mongodb
     MONGODB_PATH="${MONGODB_PATH:-"/var/lib/mongodb"}"
+    MONGODB_USER="${MONGODB_USER:-""}"
+    MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
     MONGODB_ARGS="${MONGODB_ARGS:-""}"
     ######## Mails
     DISABLE_MAIL="${DISABLE_MAIL:-}"
@@ -1167,6 +1169,12 @@ mongodb_dumpall() {
     DUMPDIR="${2}.dir"
     if [ ! -e ${DUMPDIR} ];then
         mkdir -p "${DUMPDIR}"
+    fi
+    if [ "x${MONGODB_PASSWORD}"  != "x" ];then
+        MONGODB_ARGS="$MONGODB_ARGS -p $MONGODB_PASSWORD"
+    fi
+    if [ "x${MONGODB_USER}"  != "x" ];then
+        MONGODB_ARGS="$MONGODB_ARGS -u $MONGODB_USER"
     fi
     mongodump ${MONGODB_ARGS} --out "${DUMPDIR}"\
         && die_in_error "mongodb dump failed" 
