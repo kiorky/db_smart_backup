@@ -21,7 +21,7 @@ Supported databases
 
 Why another tool ?
 --------------------
-- There are great tools out there, but they are not fitting to our needs and
+- There are great tools out there, but they are not fitting our needs and
   knowledge, and some of them did not have much tests, sorry.
 - We just wanted a simple bash script, and using **dumps** (even in custom format
   for postgres) but just snapshots. So for example, postgreSQL PITR wal were not an
@@ -30,7 +30,7 @@ Why another tool ?
   wanted and some were just too bash complicated for our little own brains.
 - We wanted hooks to react on each backup stage, those hooks can be in another
   language, this is up to the user (very usefull for monitoring stuff).
-- We want a generic script for any database, providing that you add support on
+- We want a generic script for any database, providing you add support on
   it, this consists just on writing a 'global' and a 'dump' function. For more
   information, read the sources luke.
 
