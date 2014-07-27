@@ -2,7 +2,7 @@
 Backup Script for various databases: 
 =====================================================
 Simple dump based backup with intelligent rotation and hooks.
-Supports with battery included for mysql, mongodb & postgresql
+Supports with battery included for mysql, mongodb, slapd & postgresql
 
 .. contents::
 
