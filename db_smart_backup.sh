@@ -34,6 +34,7 @@ generate_configuration_file() {
 #BACKUP_TYPE=postgresql
 #BACKUP_TYPE=mysql
 #BACKUP_TYPE=mongodb
+#BACKUP_TYPE=slapd
 
 # Backup directory location e.g /backups
 #TOP_BACKUPDIR="/var/db_smart_backup"
@@ -93,6 +94,10 @@ generate_configuration_file() {
 #PG_DUMP=""
 #PG_DUMPALL=""
 
+######## slapd
+# SLAPCAT_ARGS="${SLAPCAT_ARGS:-""}"
+# SLAPD_DIR="${SLAPD_DIR:-/var/lib/ldap}"
+
 # OPT string for use with pg_dump ( see man pg_dump )
 #OPT="--create -Fc"
 
@@ -117,6 +122,12 @@ generate_configuration_file() {
 #MYSQLDUMP_NOROUTINES=""
 # do we use ssl to connect
 #MYSQL_USE_SSL=""
+
+######## mongodb
+# MONGODB_PATH="${MONGODB_PATH:-"/var/lib/mongodb"}"
+# MONGODB_USER="${MONGODB_USER:-""}"
+# MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
+# MONGODB_ARGS="${MONGODB_ARGS:-""}"
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -883,6 +894,9 @@ set_vars() {
     MONGODB_USER="${MONGODB_USER:-""}"
     MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
     MONGODB_ARGS="${MONGODB_ARGS:-""}"
+    # slapd
+    SLAPCAT_ARGS="${SLAPCAT_ARGS:-""}"
+    SLAPD_DIR="${SLAPD_DIR:-/var/lib/ldap}"
     ######## Mails
     DISABLE_MAIL="${DISABLE_MAIL:-}"
     MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-${GET_HOSTNAME}}"
@@ -937,6 +951,8 @@ set_vars() {
     fi
     if [ "x${BACKUP_TYPE}" = "xmongodb" ];then
         BACKUP_EXT="tar"
+    elif [ "x${BACKUP_TYPE}" = "xslapd" ];then
+        BACKUP_EXT="ldif"
     else
         BACKUP_EXT="sql"
     fi
@@ -1177,7 +1193,7 @@ mongodb_dumpall() {
         MONGODB_ARGS="$MONGODB_ARGS -u $MONGODB_USER"
     fi
     mongodump ${MONGODB_ARGS} --out "${DUMPDIR}"\
-        && die_in_error "mongodb dump failed" 
+        && die_in_error "mongodb dump failed"
     cd "${DUMPDIR}" &&  tar cf "${2}" .
     die_in_error "mongodb tar failed"
     rm -rf "${DUMPDIR}"
@@ -1187,6 +1203,41 @@ mongodb_dump() {
     /bin/true
 }
 
+
+# REAL API IS HERE
+slapd_set_connection_vars() {
+    /bin/true
+}
+
+slapd_set_vars() {
+    DBNAMES=""
+}
+
+slapd_check_connectivity() {
+    if [ ! -e ${SLAPD_DIR} ];then
+        die_in_error "no slapd dir"
+    fi
+    if [ "x$(ls -1 "${SLAPD_DIR}"|wc -l|sed -e"s/ //g")" = "x0" ];then
+        die_in_error "no slapd db in ${SLAPD_DIR}"
+    fi
+}
+
+slapd_get_all_databases() {
+    /bin/true
+}
+
+slapd_dumpall() {
+    BCK_DIR="$(dirname ${2})"
+    if [ ! -e "${BCK_DIR}" ];then
+        mkdir -p "${BCK_DIR}"
+    fi
+    slapcat ${SLAPCAT_ARGS} > "${2}"
+    die_in_error "slapd $2 dump failed"
+}
+
+slapd_dump() {
+    /bin/true
+}
 
 #################### MAIN
 if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then

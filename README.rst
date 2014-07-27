@@ -18,6 +18,7 @@ Supported databases
     - Mongodb
     - PostGRESQL
     - MySQL
+    - slapd (OpenLDAP)
 
 Why another tool ?
 --------------------
