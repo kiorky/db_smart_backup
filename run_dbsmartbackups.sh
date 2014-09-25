@@ -19,7 +19,7 @@ for i in ${@};do
     if [ "x${i}" = "x--quiet" ];then
         QUIET="1"
     fi
-    if [ "x${i}" = "x--help" ] \
+    if [ "x${i}" = "x--help" ] || \
        [ "x${i}" = "x--h" ]  \
         ;then
         HELP="1"
@@ -29,10 +29,26 @@ __NAME__="RUN_DB_SMARTBACKUPS"
 if [ "x${HELP}" != "x" ];then
     echo "${0} [--quiet] [--no-colors]"
     echo "Run all found db_smart_backups configurations"
+    exit 1
 fi
 if [ x"${DEBUG}" != "x" ];then
     set -x
 fi
+filter_host_pids() {
+    if [ "x$(is_lxc)" != "x0" ];then
+        echo "${@}"
+    else
+        for pid in ${@};do
+            if [ "x$(grep -q lxc /proc/${pid}/cgroup 2>/dev/null;echo "${?}")" != "x0" ];then
+                 echo ${pid}
+             fi
+         done
+    fi
+}
+is_lxc() {
+    echo  "$(cat -e /proc/1/environ |grep container=lxc|wc -l|sed -e "s/ //g")"
+}
+
 go_run_db_smart_backup() {
     conf="${1}"
     if [ "x${QUIET}" != "x" ];then
@@ -81,7 +97,7 @@ done
 # try to run mysql backups if the config file is present
 # and we found a mysqld process
 CONF="${DB_SMARTBACKUPS_CONFS}/mysql.conf"
-if [ x"$(ps aux|grep mysqld|grep -v grep|wc -l)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ x"$(filter_host_pids $(ps aux|grep mysqld|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for mysql: $(mysql --version) (${CONF} $(which mysql))"
     fi
@@ -93,7 +109,7 @@ fi
 # try to run mongodb backups if the config file is present
 # and we found a mysqld process
 CONF="${DB_SMARTBACKUPS_CONFS}/mongod.conf"
-if [ x"$(ps aux|grep mongod|grep -v grep|wc -l)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ x"$(filter_host_pids $(ps aux|grep mongod|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for mongod: $(mongod --version|head -n1) (${CONF} $(which mongod))"
     fi
@@ -102,7 +118,7 @@ fi
 # try to run slapd backups if the config file is present
 # and we found a mysqld process
 CONF="${DB_SMARTBACKUPS_CONFS}/slapd.conf"
-if [ x"$(filter_host_pids $(ps aux|grep slapd|grep -v grep|awk '{print $2}')|wc -l)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ x"$(filter_host_pids $(ps aux|grep slapd|grep -v grep|awk '{print $2}')|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for slapd"
     fi
