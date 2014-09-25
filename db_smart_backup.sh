@@ -13,7 +13,7 @@ __NAME__="db_smart_backup"
 generate_configuration_file() {
     cat > ${DSB_CONF_FILE} << EOF
 
-# A script can run only for one database type and a speific host
+# A script can run only for one database type and a specific host
 # at a time (mysql, postgresql)
 # But you can run it with multiple configuration files
 # You can obiously share the same base backup directory.
@@ -77,16 +77,6 @@ generate_configuration_file() {
 
 # List of DBNAMES to EXLUCDE if DBNAMES are set to all (must be in " quotes)
 #DBEXCLUDE=""
-
-######## Mail setup
-# Email Address to send mail to? (user@domain.com)
-#MAILADDR="root@localhost"
-
-# this server nick name
-#MAIL_THISSERVERNAME="`hostname -f`"
-
-# set to disable mail
-#DISABLE_MAIL=""
 
 ######### Postgresql
 # binaries path
@@ -171,10 +161,6 @@ generate_configuration_file() {
 
 # Function run after backups (uncomment to use)
 #post_backup_hook="mycompany_postbackup"
-
-# Function to run after the recap mail emission
-#post_mail_hook() {
-#}
 
 # Function to run after the recap mail emission
 #failure_hook() {
@@ -465,18 +451,6 @@ do_global_backup() {
     do_db_backup_ "${db}" "$fun_"
 }
 
-do_sendmail() {
-    debug "do_sendmail"
-    if [ x"${DISABLE_MAIL}" = "x" ]; then
-        MAILER="${MAILER:-"$(which mail 2>/dev/null)"}"
-        if [ x"${MAILER}" = x"" ]; then
-            echo "No mail command found."
-        else
-            cat "${DSB_LOGFILE}" | ${MAILER} -s "${__NAME__}: Log of ${BACKUP_TYPE} backup for ${MAIL_THISSERVERNAME} - $(readable_date)" ${MAILADDR}
-        fi
-    fi
-}
-
 activate_IO_redirection() {
     if [ x"${DSB_ACTITED_RIO}" = x"" ];then
         DSB_ACTITED_RIO="1"
@@ -660,8 +634,6 @@ handle_exit() {
         fix_perms
         do_post_backup
         do_hook "Postbackup command output" "post_backup_hook"
-        do_sendmail
-        do_hook "Postmail command output" "post_mail_hook"
         if [ x"$DSB_RETURN_CODE" != "x0" ];then
             log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
         fi
@@ -897,9 +869,6 @@ set_vars() {
     # slapd
     SLAPCAT_ARGS="${SLAPCAT_ARGS:-""}"
     SLAPD_DIR="${SLAPD_DIR:-/var/lib/ldap}"
-    ######## Mails
-    DISABLE_MAIL="${DISABLE_MAIL:-}"
-    MAIL_THISSERVERNAME="${MAIL_THISSERVERNAME:-${GET_HOSTNAME}}"
 
     ######## Hooks
     pre_backup_hook="${pre_backup_hook:-}"

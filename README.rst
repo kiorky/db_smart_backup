@@ -1,5 +1,5 @@
 =====================================================
-Backup Script for various databases: 
+Backup Script for various databases:
 =====================================================
 Simple dump based backup with intelligent rotation and hooks.
 Supports with battery included for mysql, mongodb, slapd & postgresql
@@ -49,7 +49,7 @@ So main features/requirements are:
       (bash functions to uncomment)
     - **Keep a fixed number of dumps**, recent ones, old ones, and in a smart way.
       More on that later on this document. But for example the default is to keep
-      the last 24 dumps, then 14 days (1 per day), 8 weeks (1 per week) and 12 
+      the last 24 dumps, then 14 days (1 per day), 8 weeks (1 per week) and 12
       months (1 per month).
 
 
@@ -58,7 +58,8 @@ Installation
 ::
 
     curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/db_smart_backup.sh
-    chmod +x db_smart_backup.sh
+    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/run_dbsmartbakups.sh
+    chmod +x db_smart_backup.sh run_dbsmartbackups.sh
 
 Generate a config file::
 
@@ -69,6 +70,17 @@ Backup::
 
     ./db_smart_backup.sh /path/to/config
 
+Backup all found databases
+------------------------------
+We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbsmartbackup for any database configuration:
+
+    -  pg: /etc/dbsmartbackup/postgresql.conf
+    -  mysql: /etc/dbsmartbackup/mysql.conf
+    -  mongodb: /etc/dbsmartbackup/mongod.conf
+
+This is typically what you need in your cron::
+
+    * * * * * run_dbsmartbackups.sh --no-colors --quiet
 
 Changelog
 ----------
@@ -124,7 +136,7 @@ The great things
 
 - How do I see that other directories contains only hard links from dump directory?
 
-    - You can see the hard links with ls in two ways. Using `ls -i` to get the 
+    - You can see the hard links with ls in two ways. Using `ls -i` to get the
       real inode number in first col or `ls -l` to get the hard link counters.
 ::
 
@@ -195,7 +207,6 @@ Hooks
   - after the backups rotation: **post_rotate_hook**
   - after the backups orphans cleanups: **post_cleanup_hook**
   - at backup end: **post_backup_hook**
-  - when the mail is sent: **post_mail_hook**
 
 - Think that you will have access in the environment of
   the hook to all the variables defined and exported by the script.
