@@ -6,6 +6,7 @@
 # pg: /etc/dbsmartbackup/postgresql.conf
 # mysql: /etc/dbsmartbackup/mysql.conf
 # mongodb: /etc/dbsmartbackup/mongod.conf
+# slapd: /etc/dbsmartbackup/slapd.conf
 #
 
 LOG="${LOG:-/var/log/run_dbsmartbackup.log}"
@@ -95,6 +96,15 @@ CONF="${DB_SMARTBACKUPS_CONFS}/mongod.conf"
 if [ x"$(ps aux|grep mongod|grep -v grep|wc -l)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for mongod: $(mongod --version|head -n1) (${CONF} $(which mongod))"
+    fi
+    go_run_db_smart_backup "${CONF}"
+fi
+# try to run slapd backups if the config file is present
+# and we found a mysqld process
+CONF="${DB_SMARTBACKUPS_CONFS}/slapd.conf"
+if [ x"$(filter_host_pids $(ps aux|grep slapd|grep -v grep|awk '{print $2}')|wc -l)" != "x0" ] &&  [ -e "${CONF}" ];then
+    if [ "x${QUIET}" = "x" ];then
+        echo "$__NAME__: Running backup for slapd"
     fi
     go_run_db_smart_backup "${CONF}"
 fi

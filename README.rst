@@ -77,6 +77,7 @@ We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbs
     -  pg: /etc/dbsmartbackup/postgresql.conf
     -  mysql: /etc/dbsmartbackup/mysql.conf
     -  mongodb: /etc/dbsmartbackup/mongod.conf
+    -  slapd /etc/dbsmartbackup/slapd.conf
 
 This is typically what you need in your cron::
 
