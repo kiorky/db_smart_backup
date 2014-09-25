@@ -391,11 +391,10 @@ FDATE="${{DATE}}_01-02-03";dofic
         # and test than orphan cleanup the last bits
         self.exec_script(TEST)
         ret = self.exec_script(RTEST2)
+        import pdb;pdb.set_trace()
         self.assertTrue(
             re.search(
-                'Pruning .*/pgbackups/postgresql/localhost/'
-                'WITH QUOTES é utf8/lastsnapshots/'
-                'WITH QUOTES é utf8_2002_008_2002-01-08_01-02-03.sql.xz',
+                'Pruning .*WITH QUOTES',
                 ret
             )
         )
