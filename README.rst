@@ -83,7 +83,7 @@ be sure to have the scripts in your path::
 In /etc/dbsmartbackup, generate a config file (either: mysql.conf, mongod.conf, slapd.conf, postgresql.conf)::
 
 
-    ./db_smart_backup.sh --gen-config /etc//etc/dbsmartbackup/<db_type>.conf
+    ./db_smart_backup.sh --gen-config /etc/dbsmartbackup/<db_type>.conf
     vim /path/to/config
 
 test it::
