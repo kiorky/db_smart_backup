@@ -1114,7 +1114,7 @@ mysql_check_connectivity() {
     who="$(whoami)"
     pgu="$(db_user)"
     echo "select 1"|mysql_ information_schema&> /dev/null
-    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS \$PASSWORD \DBUSER in $DSB_CONF_FILE"
+    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS \$PASSWORD \$DBUSER in $DSB_CONF_FILE"
 }
 
 mysql_get_all_databases() {
