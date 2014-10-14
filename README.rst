@@ -71,8 +71,16 @@ Backup::
     ./db_smart_backup.sh /path/to/config
 
 
-Installation -- cron MODE
----------------------------------
+
+Backup all found databases in cron
+-----------------------------------
+We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbsmartbackup for any database configuration:
+
+    -  pg: /etc/dbsmartbackup/postgresql.conf
+    -  mysql: /etc/dbsmartbackup/mysql.conf
+    -  mongodb: /etc/dbsmartbackup/mongod.conf
+    -  slapd /etc/dbsmartbackup/slapd.conf
+
 be sure to have the scripts in your path::
 
     curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/db_smart_backup.sh
@@ -81,7 +89,6 @@ be sure to have the scripts in your path::
     mkdir /etc/dbsmartbackup
 
 In /etc/dbsmartbackup, generate a config file (either: mysql.conf, mongod.conf, slapd.conf, postgresql.conf)::
-
 
     ./db_smart_backup.sh --gen-config /etc/dbsmartbackup/<db_type>.conf
     vim /path/to/config
@@ -92,20 +99,7 @@ test it::
     
 Add it to cron::
 
-    0 0 * * * root /usr/bin/run_dbsmartbackups.sh 2>&1 >/dev/null
-
-Backup all found databases
-------------------------------
-We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbsmartbackup for any database configuration:
-
-    -  pg: /etc/dbsmartbackup/postgresql.conf
-    -  mysql: /etc/dbsmartbackup/mysql.conf
-    -  mongodb: /etc/dbsmartbackup/mongod.conf
-    -  slapd /etc/dbsmartbackup/slapd.conf
-
-This is typically what you need in your cron::
-
-    * * * * * run_dbsmartbackups.sh --no-colors --quiet
+    0 0 * * * root /usr/bin/run_dbsmartbackups.sh --no-colors --quiet
 
 Changelog
 ----------
