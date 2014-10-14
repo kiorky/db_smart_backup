@@ -740,11 +740,7 @@ verify_backup_type() {
 }
 
 db_user() {
-    echo "${DBUSER:-${RUNAS}}"
-}
-
-db_user() {
-    echo "${RUNAS:-"$(whoami)"}"
+    echo "${DBUSER:-${RUNAS:-$(whoami)}}"
 }
 
 set_colors() {
