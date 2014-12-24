@@ -35,6 +35,7 @@ generate_configuration_file() {
 #BACKUP_TYPE=mysql
 #BACKUP_TYPE=mongodb
 #BACKUP_TYPE=slapd
+#BACKUP_TYPE=redis
 
 # Backup directory location e.g /backups
 #TOP_BACKUPDIR="/var/db_smart_backup"
@@ -118,6 +119,9 @@ generate_configuration_file() {
 # MONGODB_USER="${MONGODB_USER:-""}"
 # MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
 # MONGODB_ARGS="${MONGODB_ARGS:-""}"
+
+######## Redis
+# REDIS_PATH="${REDIS_PATH:-"/var/lib/redis"}"
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -914,7 +918,8 @@ set_vars() {
             "${BACKUP_TYPE}_set_vars"
         fi
     fi
-    if [ "x${BACKUP_TYPE}" = "xmongodb" ];then
+    if [ "x${BACKUP_TYPE}" = "xmongodb" ]\
+       || [ "x${BACKUP_TYPE}" = "xredis" ];then
         BACKUP_EXT="tar"
     elif [ "x${BACKUP_TYPE}" = "xslapd" ];then
         BACKUP_EXT="ldif"
@@ -1168,6 +1173,46 @@ mongodb_dump() {
     /bin/true
 }
 
+#################### redis
+# REAL API IS HERE
+redis_set_connection_vars() {
+    /bin/true
+}
+
+redis_set_vars() {
+    DBNAMES=""
+    export REDIS_PATH="${REDIS_PATH:-"/var/lib/redis"}"
+}
+
+redis_check_connectivity() {
+    if [ ! -e "${REDIS_PATH}" ];then
+        die_in_error "no redis dir"
+    fi
+    if [ "x${REDIS_PATH}" != "x" ];then
+        die_in_error "redis dir is not set"
+    fi 
+    if [ "x$(ls -1 "${REDIS_PATH}"|wc -l|sed -e"s/ //g")" = "x0" ];then
+        die_in_error "no redis rdbs in ${REDIS_PATH}"
+    fi
+}
+
+redis_get_all_databases() {
+    /bin/true
+}
+
+redis_dumpall() {
+    BCK_DIR="$(dirname ${2})"
+    if [ ! -e "${BCK_DIR}" ];then
+        mkdir -p "${BCK_DIR}"
+    fi
+    c="${PWD}"
+    cd "${REDIS_PATH}" && tar cf "${2}" . && cd "${c}"
+    die_in_error "redis $2 dump failed"
+}
+
+redis_dump() {
+    /bin/true
+}
 
 #################### slapd
 # REAL API IS HERE

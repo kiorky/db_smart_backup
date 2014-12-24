@@ -17,6 +17,7 @@ Supported databases
 -------------------
     - Mongodb
     - PostGRESQL
+    - Redis
     - MySQL
     - slapd (OpenLDAP)
 

@@ -7,6 +7,7 @@
 # mysql: /etc/dbsmartbackup/mysql.conf
 # mongodb: /etc/dbsmartbackup/mongod.conf
 # slapd: /etc/dbsmartbackup/slapd.conf
+# redis: /etc/dbsmartbackup/redis.conf
 #
 
 LOG="${LOG:-/var/log/run_dbsmartbackup.log}"
@@ -106,8 +107,15 @@ fi
 if [ x"${DEBUG}" != "x" ];then
     set +x
 fi
+# try to run redi  backups if the config file is present
+CONF="${DB_SMARTBACKUPS_CONFS}/redis.conf"
+if [ x"$(filter_host_pids $(ps aux|grep redis-server|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+    if [ "x${QUIET}" = "x" ];then
+        echo "$__NAME__: Running backup for redis: $(redis-server --version|head -n1) (${CONF} $(which redis-server))"
+    fi
+    go_run_db_smart_backup "${CONF}"
+fi
 # try to run mongodb backups if the config file is present
-# and we found a mysqld process
 CONF="${DB_SMARTBACKUPS_CONFS}/mongod.conf"
 if [ x"$(filter_host_pids $(ps aux|grep mongod|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
