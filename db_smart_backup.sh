@@ -36,6 +36,7 @@ generate_configuration_file() {
 #BACKUP_TYPE=mongodb
 #BACKUP_TYPE=slapd
 #BACKUP_TYPE=redis
+#BACKUP_TYPE=es
 
 # Backup directory location e.g /backups
 #TOP_BACKUPDIR="/var/db_smart_backup"
@@ -78,6 +79,12 @@ generate_configuration_file() {
 
 # List of DBNAMES to EXLUCDE if DBNAMES are set to all (must be in " quotes)
 #DBEXCLUDE=""
+
+######### Elasticsearch
+# ES_URI="http://localhost:9200"
+# ES_USER="user"
+# ES_PASSWORD="secret"
+# elasticsearch daemon user
 
 ######### Postgresql
 # binaries path
@@ -698,7 +705,7 @@ do_hook() {
 do_backup() {
     debug "do_backup"
     if [ x"${BACKUP_TYPE}" = "x" ];then
-        die "No backup type, choose between mysql & postgresql"
+        die "No backup type, choose between mysql,postgresql,redis,mongodb,slapd,es"
     fi
     # if either the source failed or we do not have a configuration file, bail out
     die_in_error "Invalid configuration file: ${DSB_CONF_FILE}"
@@ -919,6 +926,7 @@ set_vars() {
         fi
     fi
     if [ "x${BACKUP_TYPE}" = "xmongodb" ]\
+       || [ "x${BACKUP_TYPE}" = "xes" ]\
        || [ "x${BACKUP_TYPE}" = "xredis" ];then
         BACKUP_EXT="tar"
     elif [ "x${BACKUP_TYPE}" = "xslapd" ];then
@@ -1190,7 +1198,7 @@ redis_check_connectivity() {
     fi
     if [ "x${REDIS_PATH}" != "x" ];then
         die_in_error "redis dir is not set"
-    fi 
+    fi
     if [ "x$(ls -1 "${REDIS_PATH}"|wc -l|sed -e"s/ //g")" = "x0" ];then
         die_in_error "no redis rdbs in ${REDIS_PATH}"
     fi
@@ -1248,6 +1256,152 @@ slapd_dumpall() {
 
 slapd_dump() {
     /bin/true
+}
+
+# ELASTICSEARCH
+es_set_connection_vars() {
+    if [ "x${ES_URI}" = "x" ];then
+        export ES_URI="http://localhost:9200"
+    fi         
+    export ES_USER="${ES_USER}"
+    export ES_PASSWORD="${ES_PASSWORD}"
+}
+
+es_set_vars() {
+    export BACKUP_DB_NAMES="${BACKUP_DB_NAMES:-${DBNAMES}}"
+    if [ x"${DBNAMES}" = "xall" ]; then
+        DBNAMES=${ALL_DBNAMES}
+        for exclude in ${DBEXCLUDE};do
+            DBNAMES=$(echo ${DBNAMES} | sed "s/\b${exclude}\b//g")
+        done
+    fi
+    if [ x"${DBNAMES}" = "xall" ]; then
+        die "${BACKUP_TYPE}: could not get all databases"
+    fi
+}
+
+curl_es() {
+    path="${1}"
+    shift
+    es_args=""
+    curl="$(which curl 2>/dev/null)"
+    jq="$(which jq 2>/dev/null)"
+    if [ ! -f "${curl}" ];then
+        die "install curl"
+    fi
+    if [ ! -f "${jq}" ];then
+        die "install jq"
+    fi
+    if [ "x${ES_USER}" != "x" ];then
+        es_args="-u ${ES_USER}:${ES_PASSWORD}"
+    fi
+    curl -s "${@}" $es_args "${ES_URI}/${path}"
+}
+
+es_check_connectivity() {
+    curl_es 1>/dev/null || die_in_error "$ES_URI unreachable"
+    ES_TMP=$(curl_es "_nodes/_local?pretty"|grep '"work" :'|awk '{print $3}'|sed -e 's/\(^[^"]*"\)\|\("[^"]*$\)//g')
+    # set backup repository
+}
+
+es_get_all_databases() {
+    curl_es _cat/indices|awk '{print $3}'
+}
+
+es_getreponame() {
+    name="dsb_${1}"
+    echo "${name}"
+}
+
+es_getworkdir() {
+    name="${1}"
+    echo "${ES_TMP}/dump_${name}"
+}
+
+es_createrepo() {
+    name="${1}"
+    directory="$(es_getworkdir ${name})"
+    esname="$(es_getreponame ${name})"
+    if [ ! -e "${ES_TMP}" ];then
+        die "Invalid es dir"
+    fi
+    if [ -e "${directory}" ];then
+        rm -rf "${directory}"
+    fi
+    for i in $(seq 3);do
+        ret=$(curl_es "_snapshot/${esname}"|jq '.["'"${esname}"'"]["settings"]["location"]')
+        if [ "x${ret}" != 'x"'"${directory}"'"' ];then
+            sleep 1
+        else
+            break
+        fi
+    done
+    if [ "x${ret}" = 'x"'"${directory}"'"' ];then
+        sleep 1
+    fi
+    curl_es "_snapshot/${name}" -XDELETE >/dev/null 2>&1
+    die_in_error "Directory API link removal problem for ${name} / ${esname} / ${directory}"
+    ret=$(curl_es "_snapshot/${esname}" -XPUT\
+        -d '{"type": "fs", "settings": {"location": "'"${directory}"'", "compress": false}}')
+    if [ "x${ret}" != 'x{"acknowledged":true}' ];then
+        die "Cannot create repo ${esname} for ${name}"
+    fi
+    for i in $(seq 10);do
+        ret=$(curl_es "_snapshot/${esname}"|jq '.["'"${esname}"'"]["settings"]["location"]')
+        if [ "x${ret}" != 'x"'"${directory}"'"' ];then
+            sleep 1
+        else
+            break
+        fi
+    done
+    if [ "x${ret}" != 'x"'"${directory}"'"' ];then
+        die "Directory snapshot metadata problem for ${name} / ${directory}"
+    fi
+}
+
+
+es_dumpall() {
+    cwd="${PWD}"
+    name="$(basename $(dirname $(dirname ${2})))"
+    esname="$(es_getreponame ${name})"
+    es_createrepo "${name}"
+    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT)
+    if [ "x$(echo "${ret}"|grep -q '"state":"SUCCESS"';echo ${?})" = "x0" ];then
+        directory=$(es_getworkdir ${name})
+        if [ -e "${directory}" ];then
+            cd "${directory}"
+            tar cf "${2}" . && cd "${cwd}"
+            die_in_error "ES tar: ${2} / ${name} / ${esname} failed"
+        else
+            die_in_error "ES tar: ${2} / ${name} / ${esname} backup workdir ${directory}  pb"
+        fi
+    else
+        die_in_error "ES tar: ${2} / ${name} / ${esname} backup failed"
+    fi
+}
+
+es_dump() {
+    cwd="${PWD}"
+    name="$(basename $(dirname $(dirname ${2})))"
+    esname="$(es_getreponame ${name})"
+    es_createrepo "${name}"
+    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT -d '{
+        "indices": "'"${name}"'",
+        "ignore_unavailable": "true",
+        "include_global_state": false
+    }')
+    if [ "x$(echo "${ret}"|grep -q '"state":"SUCCESS"';echo ${?})" = "x0" ];then
+        directory=$(es_getworkdir ${name})
+        if [ -e "${directory}" ];then
+            cd "${directory}"
+            tar cf "${2}" . && cd "${cwd}"
+            die_in_error "ESs tar: ${2} / ${name} / ${esname} failed"
+        else
+            die_in_error "ESs tar: ${2} / ${name} / ${esname} backup workdir ${directory} pb"
+        fi
+    else
+        die_in_error "ESs tar: ${2} / ${name} / ${esname} backup failed"
+    fi
 }
 
 #################### MAIN

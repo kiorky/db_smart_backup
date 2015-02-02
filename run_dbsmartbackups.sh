@@ -132,6 +132,15 @@ if [ x"$(filter_host_pids $(ps aux|grep slapd|grep -v grep|awk '{print $2}')|wc 
     fi
     go_run_db_smart_backup "${CONF}"
 fi
+# try to run ES backups if the config file is present
+# and we found a mysqld process
+CONF="${DB_SMARTBACKUPS_CONFS}/elasticsearch.conf"
+if [ x"$(filter_host_pids $(ps aux|grep org.elasticsearch.bootstrap.Elasticsearch|grep -v grep|awk '{print $2}')|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+    if [ "x${QUIET}" = "x" ];then
+        echo "$__NAME__: Running backup for elasticsearch"
+    fi
+    go_run_db_smart_backup "${CONF}"
+fi 
 if [ x"${DEBUG}" != "x" ];then
     set +x
 fi

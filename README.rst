@@ -18,6 +18,7 @@ Supported databases
     - Mongodb
     - PostGRESQL
     - Redis
+    - Elasticsearch
     - MySQL
     - slapd (OpenLDAP)
 
