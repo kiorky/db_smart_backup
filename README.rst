@@ -82,6 +82,8 @@ We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbs
     -  mysql: /etc/dbsmartbackup/mysql.conf
     -  mongodb: /etc/dbsmartbackup/mongod.conf
     -  slapd /etc/dbsmartbackup/slapd.conf
+    -  redis /etc/dbsmartbackup/redis.conf
+    -  elasticsearch /etc/dbsmartbackup/elasticsearch.conf
 
 be sure to have the scripts in your path::
 
