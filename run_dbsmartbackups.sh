@@ -9,6 +9,9 @@
 # slapd: /etc/dbsmartbackup/slapd.conf
 # redis: /etc/dbsmartbackup/redis.conf
 #
+if [ -f /etc/db_smart_backup_deactivated ];then
+    exit 0
+fi
 
 LOG="${LOG:-/var/log/run_dbsmartbackup.log}"
 QUIET="${QUIET:-}"
