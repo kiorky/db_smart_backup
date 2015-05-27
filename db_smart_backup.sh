@@ -635,18 +635,22 @@ handle_hook_error() {
     handle_exit
 }
 
+do_prune() {
+    do_rotate
+    do_hook "Postrotate command output" "post_rotate_hook"
+    do_cleanup_orphans
+    do_hook "Postcleanup command output" "post_cleanup_hook"
+    fix_perms
+    do_post_backup
+    do_hook "Postbackup command output" "post_backup_hook"
+}
+
 handle_exit() {
     DSB_RETURN_CODE="${DSB_RETURN_CODE:-$?}"
     if [ x"${DSB_BACKUP_STARTED}" != "x" ];then
         debug "handle_exit"
         DSB_HOOK_NO_TRAP="1"
-        do_rotate
-        do_hook "Postrotate command output" "post_rotate_hook"
-        do_cleanup_orphans
-        do_hook "Postcleanup command output" "post_cleanup_hook"
-        fix_perms
-        do_post_backup
-        do_hook "Postbackup command output" "post_backup_hook"
+        do_prune
         if [ x"$DSB_RETURN_CODE" != "x0" ];then
             log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
         fi
@@ -739,6 +743,11 @@ do_backup() {
     fi
 }
 
+mark_run_rotate() {
+    DSB_CONF_FILE="${1}"
+    DO_PRUNE="1"
+}
+
 mark_run_backup() {
     DSB_CONF_FILE="${1}"
     DO_BACKUP="1"
@@ -792,6 +801,8 @@ set_vars() {
                 DSB_GENERATE_CONFIG="1"
                 DSB_CONF_FILE="${2:-${DSB_CONF_FILE_DEFAULT}}"
                 sh="2"
+            elif [ x"${1}" = "x-p" ] || [ x"${1}" = "x--prune" ];then
+                mark_run_rotate ${2};sh="2"
             elif [ x"${1}" = "x-b" ] || [ x"${1}" = "x--backup" ];then
                 mark_run_backup ${2};sh="2"
             else
@@ -962,9 +973,14 @@ do_main() {
         elif [ x"${DSB_GENERATE_CONFIG}" != "x" ];then
             generate_configuration_file
             die_in_error "end_of_scripts"
-        elif [ x"${DO_BACKUP}" != "x" ];then
+        elif [ "x${DO_BACKUP}" != "x" ] || [ "x${DO_PRUNE}" != "x" ] ;then
             if [ -e "${DSB_CONF_FILE}" ];then
-                do_backup
+                if [ "x${DO_PRUNE}" != "x" ];then
+                    func=do_prune
+                else
+                    func=do_backup
+                fi
+                ${func}
                 die_in_error "end_of_scripts"
             else
                 cyan_log "Missing or invalid configuration file: ${DSB_CONF_FILE}"
