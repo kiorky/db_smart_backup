@@ -84,6 +84,8 @@ generate_configuration_file() {
 # ES_URI="http://localhost:9200"
 # ES_USER="user"
 # ES_PASSWORD="secret"
+# path to snapshots (have to be added to path.repo in elasticsearch.yml)
+# ES_SNAPSHOTS_DIR="${ES_SNAPSHOTS_DIR:-${ES_TMP}/snapshots}"
 # elasticsearch daemon user
 
 ######### Postgresql
@@ -1305,6 +1307,7 @@ curl_es() {
 es_check_connectivity() {
     curl_es 1>/dev/null || die_in_error "$ES_URI unreachable"
     ES_TMP=$(curl_es "_nodes/_local?pretty"|grep '"work" :'|awk '{print $3}'|sed -e 's/\(^[^"]*"\)\|\("[^"]*$\)//g')
+    ES_SNAPSHOTS_DIR="${ES_SNAPSHOTS_DIR:-${ES_TMP}/snapshots}"
     # set backup repository
 }
 
@@ -1319,18 +1322,16 @@ es_getreponame() {
 
 es_getworkdir() {
     name="${1}"
-    echo "${ES_TMP}/dump_${name}"
+    # THIS HAVE TO BE ADDED TO PATH.REPO ES CONF !
+    echo "${ES_SNAPSHOTS_DIR}/${name}"
 }
 
-es_createrepo() {
+es_preparerepo() {
     name="${1}"
     directory="$(es_getworkdir ${name})"
     esname="$(es_getreponame ${name})"
-    if [ ! -e "${ES_TMP}" ];then
+    if [ ! -e "${ES_SNAPSHOTS_DIR}" ];then
         die "Invalid es dir"
-    fi
-    if [ -e "${directory}" ];then
-        rm -rf "${directory}"
     fi
     for i in $(seq 3);do
         ret=$(curl_es "_snapshot/${esname}"|jq '.["'"${esname}"'"]["settings"]["location"]')
@@ -1343,12 +1344,14 @@ es_createrepo() {
     if [ "x${ret}" = 'x"'"${directory}"'"' ];then
         sleep 1
     fi
-    curl_es "_snapshot/${name}" -XDELETE >/dev/null 2>&1
+    curl_es "_snapshot/${esname}" -XDELETE >/dev/null 2>&1
     die_in_error "Directory API link removal problem for ${name} / ${esname} / ${directory}"
     ret=$(curl_es "_snapshot/${esname}" -XPUT\
-        -d '{"type": "fs", "settings": {"location": "'"${directory}"'", "compress": false}}')
+        -d '{"type": "fs", "settings": {"location": "'"$(basename ${directory})"'", "compress": false}}')
     if [ "x${ret}" != 'x{"acknowledged":true}' ];then
-        die "Cannot create repo ${esname} for ${name}"
+        echo "${ret}" >&2
+        /bin/false
+        die "Cannot create repo ${esname} for ${name} (${directory})"
     fi
     for i in $(seq 10);do
         ret=$(curl_es "_snapshot/${esname}"|jq '.["'"${esname}"'"]["settings"]["location"]')
@@ -1358,7 +1361,8 @@ es_createrepo() {
             break
         fi
     done
-    if [ "x${ret}" != 'x"'"${directory}"'"' ];then
+    if [ "x${ret}" != 'x"'"$(basename ${directory})"'"' ];then
+        echo $ret >&2;/bin/false
         die "Directory snapshot metadata problem for ${name} / ${directory}"
     fi
 }
@@ -1368,18 +1372,22 @@ es_dumpall() {
     cwd="${PWD}"
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
-    es_createrepo "${name}"
+    es_preparerepo "${name}"
+    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT)
     if [ "x$(echo "${ret}"|grep -q '"state":"SUCCESS"';echo ${?})" = "x0" ];then
         directory=$(es_getworkdir ${name})
         if [ -e "${directory}" ];then
             cd "${directory}"
-            tar cf "${2}" . && cd "${cwd}"
+            tar cf "${2}" .\
+                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && cd "${cwd}"
             die_in_error "ES tar: ${2} / ${name} / ${esname} failed"
         else
             die_in_error "ES tar: ${2} / ${name} / ${esname} backup workdir ${directory}  pb"
         fi
     else
+        echo ${ret} >&2;/bin/false
         die_in_error "ES tar: ${2} / ${name} / ${esname} backup failed"
     fi
 }
@@ -1388,7 +1396,8 @@ es_dump() {
     cwd="${PWD}"
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
-    es_createrepo "${name}"
+    es_preparerepo "${name}"
+    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT -d '{
         "indices": "'"${name}"'",
         "ignore_unavailable": "true",
@@ -1398,12 +1407,15 @@ es_dump() {
         directory=$(es_getworkdir ${name})
         if [ -e "${directory}" ];then
             cd "${directory}"
-            tar cf "${2}" . && cd "${cwd}"
+            tar cf "${2}" .\
+                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && cd "${cwd}"
             die_in_error "ESs tar: ${2} / ${name} / ${esname} failed"
         else
             die_in_error "ESs tar: ${2} / ${name} / ${esname} backup workdir ${directory} pb"
         fi
     else
+        echo ${ret} >&2;/bin/false
         die_in_error "ESs tar: ${2} / ${name} / ${esname} backup failed"
     fi
 }
