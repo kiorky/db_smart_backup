@@ -284,7 +284,7 @@ get_compressed_name() {
 }
 
 set_compressor() {
-    for comp in ${COMP} ${COMP}S;do
+    for comp in ${COMP} ${COMPS};do
         c=""
         if [ x"${COMP}" = "xxz" ];then
             XZ="${XZ:-xz}"
