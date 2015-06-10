@@ -906,11 +906,11 @@ set_vars() {
     DSB_BACKUP_FAILED="4"
 
     activate_IO_redirection
-    set_compressor
     # source conf file if any
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
     fi
+    set_compressor
 
     if [ x"${BACKUP_TYPE}" != "x" ];then
         verify_backup_type
