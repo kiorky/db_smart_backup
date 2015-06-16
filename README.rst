@@ -37,6 +37,8 @@ Why another tool ?
   it, this consists just on writing a 'global' and a 'dump' function. For more
   information, read the sources luke.
 
+- **WARNING**
+  DO NOT PUT DATA UNDER THE DATADIR ELSE THAN WHAT DBSMARTBACKUP
 
 So main features/requirements are:
 
@@ -95,12 +97,20 @@ be sure to have the scripts in your path::
 In /etc/dbsmartbackup, generate a config file (either: mysql.conf, mongod.conf, slapd.conf, postgresql.conf)::
 
     ./db_smart_backup.sh --gen-config /etc/dbsmartbackup/<db_type>.conf
-    vim /path/to/config
+    vim /path/to/configa
 
-test it::
+Testing the backup::
+
+    ./db_smart_backup.sh /etc/dbsmartbackup/<db_type>.conf
+
+Only execute the pruning policy::
+
+    ./db_smart_backup.sh -p /etc/dbsmartbackup/<db_type>.conf
+
+Test the cron that search for all possible things to backups::
 
     run_dbsmartbackups.sh
-    
+
 Add it to cron::
 
     0 0 * * * root /usr/bin/run_dbsmartbackups.sh --no-colors --quiet
