@@ -611,11 +611,13 @@ do_rotate() {
                 fi
                 i=0
                 get_sorted_files "${subdir}" | while read nfic;do
-                    fic="${subdir}/${nfic}"
+                    dfic="${subdir}/${nfic}"
                     i="$((${i}+1))"
-                    if [ "${i}" -gt "${to_keep}" ] && [ -e "${fic}" ];then
-                        log "       * Unliking ${YELLOW}${fic}${NORMAL}"
-                        rm "${fic}"
+                    if [ "${i}" -gt "${to_keep}" ] &&\
+                        [ -e "${dfic}" ] &&\
+                        [ ! -d ${dfic} ];then
+                        log "       * Unlinking ${YELLOW}${dfic}${NORMAL}"
+                        rm "${dfic}"
                     fi
                 done
             fi
@@ -677,16 +679,12 @@ do_cleanup_orphans() {
     log "Cleaning orphaned dumps:"
     # prune all files in dumps dirs which have no more any
     # hardlinks in chronoted directories (weekly, monthly, daily)
-    find "${TOP_BACKUPDIR}/${BACKUP_TYPE}" -maxdepth 3 -mindepth 3 -type d -print 2>/dev/null|\
-        while read dumpdirs
+    find "$(get_backupdir)" -type f -links 1 -print 2>/dev/null|\
+        while read fic
         do
-            find "$dumpdirs" -type f -links 1 -print 2>/dev/null|\
-                while read fic
-                do
-                    log "       * Pruning ${YELLOW}${fic}${NORMAL}"
-                    rm -f "${fic}"
-                done
-            done
+            log "       * Pruning ${YELLOW}${fic}${NORMAL}"
+            rm -f "${fic}"
+        done
 }
 
 do_hook() {
