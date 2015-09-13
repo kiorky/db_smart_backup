@@ -1282,7 +1282,7 @@ slapd_dump() {
 es_set_connection_vars() {
     if [ "x${ES_URI}" = "x" ];then
         export ES_URI="http://localhost:9200"
-    fi         
+    fi
     export ES_USER="${ES_USER}"
     export ES_PASSWORD="${ES_PASSWORD}"
 }
