@@ -284,7 +284,7 @@ get_compressed_name() {
 }
 
 set_compressor() {
-    for comp in ${COMP} ${COMP}S;do
+    for comp in ${COMP} ${COMPS};do
         c=""
         if [ x"${COMP}" = "xxz" ];then
             XZ="${XZ:-xz}"
@@ -906,11 +906,11 @@ set_vars() {
     DSB_BACKUP_FAILED="4"
 
     activate_IO_redirection
-    set_compressor
     # source conf file if any
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
     fi
+    set_compressor
 
     if [ x"${BACKUP_TYPE}" != "x" ];then
         verify_backup_type
