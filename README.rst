@@ -59,8 +59,8 @@ Installation
 ------------
 ::
 
-    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/db_smart_backup.sh
-    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/run_dbsmartbakups.sh
+    curl -OJLs https://raw.githubusercontent.com/kiorky/db_smart_backup/master/db_smart_backup.sh
+    curl -OJLs https://raw.githubusercontent.com/kiorky/db_smart_backup/master/run_dbsmartbackups.sh
     chmod +x db_smart_backup.sh run_dbsmartbackups.sh
 
 Generate a config file::
@@ -87,8 +87,8 @@ We also bundle a script named **run_dbsmartbackups.sh** which search in /etc/dbs
 
 be sure to have the scripts in your path::
 
-    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/db_smart_backup.sh
-    curl -OJLs https://raw2.github.com/kiorky/db_smart_backup/master/run_dbsmartbakups.sh
+    curl -OJLs https://raw.githubusercontent.com/kiorky/db_smart_backup/master/db_smart_backup.sh
+    curl -OJLs https://raw.githubusercontent.com/kiorky/db_smart_backup/master/run_dbsmartbackups.sh
     chmod +x db_smart_backup.sh run_dbsmartbackups.sh
     mkdir /etc/dbsmartbackup
 
