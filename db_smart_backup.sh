@@ -817,7 +817,11 @@ set_vars() {
     COMP=${COMP:-xz}
     BACKUP_TYPE=${BACKUP_TYPE:-}
     TOP_BACKUPDIR="${TOP_BACKUPDIR:-/var/db_smart_backup}"
-    DO_GLOBAL_BACKUP="1"
+    DEFAULT_DO_GLOBAL_BACKUP="1"
+    if [ "x${BACKUP_TYPE}" = "xes" ];then
+        DEFAULT_DO_GLOBAL_BACKUP=""
+    fi
+    DO_GLOBAL_BACKUP="${DO_GLOBAL_BACKUP-${DEFAULT_DO_GLOBAL_BACKUP}}"
     KEEP_LASTS="${KEEP_LASTS:-24}"
     KEEP_DAYS="${KEEP_DAYS:-14}"
     KEEP_WEEKS="${KEEP_WEEKS:-8}"
