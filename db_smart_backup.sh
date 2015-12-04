@@ -1081,8 +1081,10 @@ mysql_set_connection_vars() {
         printf "${MYSQL_SOCK_PATHS}\n\n" > tmppipe &
         while read path
         do
-            export MYSQL_HOST="127.0.0.1"
-            export MYSQL_UNIX_PORT="${path}"
+            if [ "x${path}" != "x" ]; then
+                export MYSQL_HOST="127.0.0.1"
+                export MYSQL_UNIX_PORT="${path}"
+            fi
         done < tmppipe
         rm tmppipe
     fi
