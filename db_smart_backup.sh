@@ -1078,12 +1078,13 @@ mysql_set_connection_vars() {
     export MYSQL_PWD="${PASSWORD}"
     if [ x"${MYSQL_HOST}" = "xlocalhost" ];then
         mkfifo tmppipe
-        echo -e "$MYSQL_SOCK_PATHS" > tmppipe &
+        printf "${MYSQL_SOCK_PATHS}\n\n" > tmppipe &
         while read path
         do
             export MYSQL_HOST="127.0.0.1"
             export MYSQL_UNIX_PORT="${path}"
         done < tmppipe
+        rm tmppipe
     fi
     if [ -e "${MYSQL_UNIX_PORT}" ];then
         log "Using mysql socket: ${path}"
