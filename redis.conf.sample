@@ -1,0 +1,143 @@
+# A script can run only for one database type and a speific host
+
+# at a time (mongod, postgresql)
+# But you can run it with multiple configuration files
+# You can obiously share the same base backup directory.
+
+
+
+# set to 1 to deactivate colors (cron)
+#NO_COLOR=""
+
+# Choose Compression type. (gzip or bzip2 or xz)
+#COMP=bzip2
+
+#User to run dumps dump binaries as, defaults to logged in user
+#RUNAS=postgres
+#DB user to connect to the database with, defaults to
+#DBUSER=postgres
+
+######## Backup settings
+# one of: postgresql mongod
+#BACKUP_TYPE=postgresql
+BACKUP_TYPE="redis"
+
+# Backup directory location e.g /backups
+TOP_BACKUPDIR="/srv/backups/redis"
+
+# do also global backup (use by postgresql to save roles/groups and only that
+DO_GLOBAL_BACKUP="1"
+
+# HOW MANY BACKUPS TO KEEP & LEVEL
+# How many snapshots to keep (lastlog for dump)
+# How many per day
+KEEP_LASTS=24
+KEEP_DAYS=14
+KEEP_WEEKS=88
+KEEP_MONTHES=12
+KEEP_LOGS=60
+
+# directories permission
+#DPERM="750"
+
+# directory permission
+#FPERM="640"
+
+# OWNER/GROUP
+OWNER=root
+GROUP=root
+
+######## Database connection settings
+# host defaults to localhost
+# and without port we use a connection via socket
+#HOST=""
+#PORT=""
+
+# defaults to postgres on postgresql backup
+# as ident is used by default on many installs, we certainly
+# do not need either a password
+PASSWORD=""
+
+# List of DBNAMES for Daily/Weekly Backup e.g. "DB1 DB2 DB3"
+DBNAMES="all"
+
+# List of DBNAMES to EXLUCDE if DBNAMES are set to all (must be in " quotes)
+DBEXCLUDE=""
+
+######## Mail setup
+# Email Address to send mail to? (user@domain.com)
+MAILADDR="root@localhost"
+
+# this server nick name
+MAIL_THISSERVERNAME="$(hostname -f)"
+
+# set to disable mail
+DISABLE_MAIL=""
+
+######### Postgresql
+# binaries path
+#PSQL=""
+#PG_DUMP=""
+#PG_DUMPALL=""
+
+# OPT string for use with pg_dump ( see man pg_dump )
+#OPT="--create -Fc"
+
+# OPT string for use with pg_dumpall ( see man pg_dumpall )
+#OPTALL="--globals-only"
+
+######## Hooks (optionnal)
+# functions names which point to functions defined in your
+# configuration file
+# Pay attention not to make function names colliding with functions in the script
+
+#
+# All those hooks can call externals programs (eg: python scripts)
+# Look inside the shell script to know which variables you ll have
+# set in the context, but you ll have useful information available at
+# each stage like the dbname, etc.
+#
+
+# Function to run before backups (uncomment to use)
+#pre_backup_hook() {
+#}
+
+# Function to run after global backup  (uncomment to use)
+#post_global_backup_hook() {
+#}
+
+# Function to run after global backup  (uncomment to use)
+#post_global_backup_failure_hook() {
+#}
+
+# Fuction run after each database backup if the backup failed
+#post_db_backup_failure_hook() {
+#}
+
+# Function to run after each database backup (uncomment to use)
+#post_db_backup_hook() {
+#}
+
+# Function to run after backup rotation
+#post_rotate_hook() {
+#}
+
+# Function to run after backup orphan cleanup
+#post_cleanup_hook() {
+#}
+
+# Function run after backups (uncomment to use)
+#post_backup_hook="mycompany_postbackup"
+
+# Function to run after the recap mail emission
+#post_mail_hook() {
+#}
+
+# Function to run after the recap mail emission
+#failure_hook() {
+#}
+if [ -f /etc/dbsmartbackup/redis.conf.local ];then
+    . /etc/dbsmartbackup/redis.conf.local
+fi
+
+# vim:set ft=sh:
