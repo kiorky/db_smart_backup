@@ -115,6 +115,12 @@ Add it to cron::
 
     0 0 * * * root /usr/bin/run_dbsmartbackups.sh --no-colors --quiet
 
+
+For postgresql, you can configure the path to your postgresql.conf(s) PATH(s) by
+exporting "PG_CONFS" that is a space separated absolute paths to
+postgresql.conf's.
+Note, that for redhat or debian based, PG_CONFS should be OK by default.
+
 Changelog
 ----------
 

@@ -67,7 +67,15 @@ go_run_db_smart_backup() {
         fi
     fi
 }
-PORTS=$(egrep -h "^port\s=\s" /etc/postgresql/*/*/post*.conf 2>/dev/null|awk -F= '{print $2}'|awk '{print $1}'|sort -u)
+if [ "x${PG_CONFS}" = "x" ];then
+    # /etc/postgresql matches debia,n
+    # /var/lib/pgsql matches redhat
+    PG_CONFS=$(find /etc/postgresql /var/lib/pgsql -name postgresql.conf 2>/dev/null)
+fi
+if [ "x${PG_CONFS}" = "x" ];then
+    PG_CONFS=/etc/postgresql.conf
+fi
+PORTS=$(egrep -h "^port\s=\s" ${PG_CONFS} 2>/dev/null|awk -F= '{print $2}'|awk '{print $1}'|sort -u)
 DB_SMARTBACKUPS_CONFS="/etc/dbsmartbackup"
 # try to run postgresql backup to any postgresql version if we found
 # a running socket in the standard debian location
@@ -143,7 +151,7 @@ if [ x"$(filter_host_pids $(ps aux|grep org.elasticsearch.bootstrap.Elasticsearc
         echo "$__NAME__: Running backup for elasticsearch"
     fi
     go_run_db_smart_backup "${CONF}"
-fi 
+fi
 if [ x"${DEBUG}" != "x" ];then
     set +x
 fi
