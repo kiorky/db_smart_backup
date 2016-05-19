@@ -180,6 +180,7 @@ generate_configuration_file() {
 #}
 # vim:set ft=sh:
 EOF
+    chmod 640 "${DSB_CONF_FILE}"
 }
 
 fn_exists() {
