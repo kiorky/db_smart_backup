@@ -1077,16 +1077,12 @@ mysql_set_connection_vars() {
     export MYSQL_TCP_PORT="${PORT:-3306}"
     export MYSQL_PWD="${PASSWORD}"
     if [ x"${MYSQL_HOST}" = "xlocalhost" ];then
-        mkfifo tmppipe
-        printf "${MYSQL_SOCK_PATHS}\n\n" > tmppipe &
-        while read path
-        do
+        while read path;do
             if [ "x${path}" != "x" ]; then
                 export MYSQL_HOST="127.0.0.1"
                 export MYSQL_UNIX_PORT="${path}"
             fi
-        done < tmppipe
-        rm tmppipe
+        done < <(printf "${MYSQL_SOCK_PATHS}\n\n")
     fi
     if [ -e "${MYSQL_UNIX_PORT}" ];then
         log "Using mysql socket: ${path}"
@@ -1137,7 +1133,7 @@ mysql_set_vars() {
 
 mysql_common_args() {
     args=""
-    if [ x"${MYSQL_USE_SSL}" ];then
+    if [ x"${MYSQL_USE_SSL}" != "x" ];then
         args="${args} --ssl"
     fi
     echo "${args}"
@@ -1151,7 +1147,9 @@ mysql_check_connectivity() {
 }
 
 mysql_get_all_databases() {
-    echo "select schema_name from SCHEMATA;"|mysql_ -N information_schema 2>/dev/null
+    echo "select schema_name from SCHEMATA;"|mysql_ -N information_schema 2>/dev/null \
+        | grep -v performance_schema \
+        | grep -v information_schema
     die_in_error "Could not get mysql databases"
 }
 
