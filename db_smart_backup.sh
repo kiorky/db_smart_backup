@@ -357,6 +357,16 @@ do_compression() {
     fi
 }
 
+get_logsdir() {
+    dir="${TOP_BACKUPDIR}/logs"
+    echo "$dir"
+}
+
+get_logfile() {
+    filen="$(get_logsdir)/${__NAME__}_${FULL_FDATE}.log"
+    echo ${filen}
+}
+
 get_backupdir() {
     dir="${TOP_BACKUPDIR}/${BACKUP_TYPE:-}"
     if [  x"${BACKUP_TYPE}" = "xpostgresql" ];then
@@ -468,11 +478,12 @@ do_global_backup() {
 activate_IO_redirection() {
     if [ x"${DSB_ACTITED_RIO}" = x"" ];then
         DSB_ACTITED_RIO="1"
-        if [ ! -e "${DSB_LOGDIR}" ];then
-            mkdir -p "${DSB_LOGDIR}"
+        logdir="$(dirname $(get_logfile))"
+        if [ ! -e "${logdir}" ];then
+            mkdir -p "${logdir}"
         fi
-        touch "${DSB_LOGFILE}"
-        exec 1> >(tee -a "${DSB_LOGFILE}") 2>&1
+        touch "$(get_logfile)"
+        exec 1> >(tee -a "$(get_logfile)") 2>&1
     fi
 }
 
@@ -497,7 +508,7 @@ do_pre_backup() {
     log_rule
     log "DB_SMART_BACKUP by kiorky@cryptelium.net / http://www.makina-corpus.com"
     log "Conf: ${YELLOW}'${DSB_CONF_FILE}'"
-    log "Log: ${YELLOW}'${DSB_LOGFILE}'"
+    log "Log: ${YELLOW}'$(get_logfile)'"
     log "Backup Start Time: ${YELLOW}$(readable_date)${NORMAL}"
     log "Backup of database compression://type@server: ${YELLOW}${comp_msg}://${BACKUP_TYPE}@${HOST}${NORMAL}"
     log_rule
@@ -551,7 +562,7 @@ do_post_backup() {
 }
 
 sanitize_log() {
-    sed -i -e "s/\x1B\[[0-9;]*[JKmsu]//g" "${DSB_LOGFILE}"
+    sed -i -e "s/\x1B\[[0-9;]*[JKmsu]//g" "$(get_logfile)"
 }
 
 get_sorted_files() {
@@ -655,14 +666,14 @@ handle_exit() {
         DSB_HOOK_NO_TRAP="1"
         do_prune
         if [ x"$DSB_RETURN_CODE" != "x0" ];then
-            log "WARNING, this script did not behaved correctly, check the log: ${DSB_LOGFILE}"
+            log "WARNING, this script did not behaved correctly, check the log: $(get_logfile)"
         fi
         if [ x"${DSB_GLOBAL_BACKUP_IN_FAILURE}" != x"" ];then
-            cyan_log "Global backup failed, check the log: ${DSB_LOGFILE}"
+            cyan_log "Global backup failed, check the log: $(get_logfile)"
             DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
         fi
         if [ x"${DSB_BACKUP_IN_FAILURE}" != x"" ];then
-            cyan_log "One of the databases backup failed, check the log: ${DSB_LOGFILE}"
+            cyan_log "One of the databases backup failed, check the log: $(get_logfile)"
             DSB_RETURN_CODE="${DSB_BACKUP_FAILED}"
         fi
     fi
@@ -914,18 +925,16 @@ set_vars() {
     YEAR=`date +%Y` # Datestamp e.g 2002-09-21
     MNUM=`date +%m` # Month e.g 1
     W=`date +%V`    # Week Number e.g 37
-    DSB_LOGDIR="${TOP_BACKUPDIR}/logs"
-    DSB_LOGFILE="${DSB_LOGDIR}/${__NAME__}_${FULL_FDATE}.log"    # Logfile Name
     DSB_BACKUPFILES="" # thh: added for later mailing
     DSB_RETURN_CODE=""
     DSB_GLOBAL_BACKUP_FAILED="3"
     DSB_BACKUP_FAILED="4"
 
-    activate_IO_redirection
     # source conf file if any
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
     fi
+    activate_IO_redirection
     set_compressor
 
     if [ x"${BACKUP_TYPE}" != "x" ];then
