@@ -51,7 +51,7 @@ generate_configuration_file() {
 #KEEP_DAYS=14
 #KEEP_WEEKS=8
 #KEEP_MONTHES=12
-#KEEP_LOGS=60
+#EEP_LOGS=60
 
 # directories permission
 #DPERM="750"
@@ -594,7 +594,6 @@ do_rotate() {
     log "   -  monthly dumps  : ${YELLOW}${KEEP_MONTHES}${NORMAL}"
     # ./TOPDIR/POSTGRESQL/HOSTNAME
     # or ./TOPDIR/logs for logs
-    KEEP_LOGS=2
     ls -1d "${TOP_BACKUPDIR}" "$(get_backupdir)"/*|while read nsubdir;do
         # ./TOPDIR/HOSTNAME/DBNAME/${monthly,weekly,daily,dumps}
         suf=""
@@ -609,7 +608,7 @@ do_rotate() {
             subdir="${nsubdir}/${chronodir}"
             if [ -d "${subdir}" ];then
                 if [ x"${chronodir}" = "xlogs" ];then
-                    to_keep=${KEEP_LOGS:-2}
+                    to_keep=${KEEP_LOGS:-60}
                 elif [ x"${chronodir}" = "xweekly" ];then
                     to_keep=${KEEP_WEEKS:-2}
                 elif [ x"${chronodir}" = "xmonthly" ];then
