@@ -113,7 +113,7 @@ done
 # try to run mysql backups if the config file is present
 # and we found a mysqld process
 CONF="${DB_SMARTBACKUPS_CONFS}/mysql.conf"
-if [ x"$(filter_host_pids $(ps aux|grep mysqld|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ "x$(which mysql 2>/dev/null)" != "x" ] && [ x"$(filter_host_pids $(ps aux|grep mysqld|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for mysql: $(mysql --version) (${CONF} $(which mysql))"
     fi
@@ -124,7 +124,7 @@ if [ x"${DEBUG}" != "x" ];then
 fi
 # try to run redi  backups if the config file is present
 CONF="${DB_SMARTBACKUPS_CONFS}/redis.conf"
-if [ -e /var/lib/redis ] && [ x"$(filter_host_pids $(ps aux|grep redis-server|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ "x$(which redis-server)" != "x" ] && [ x"$(filter_host_pids $(ps aux|grep redis-server|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for redis: $(redis-server --version|head -n1) (${CONF} $(which redis-server))"
     fi
@@ -132,7 +132,7 @@ if [ -e /var/lib/redis ] && [ x"$(filter_host_pids $(ps aux|grep redis-server|gr
 fi
 # try to run mongodb backups if the config file is present
 CONF="${DB_SMARTBACKUPS_CONFS}/mongod.conf"
-if [ x"$(filter_host_pids $(ps aux|grep mongod|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ "x$(which mongod 2>/dev/null )" != "x" ] && [ x"$(filter_host_pids $(ps aux|grep mongod|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for mongod: $(mongod --version|head -n1) (${CONF} $(which mongod))"
     fi
