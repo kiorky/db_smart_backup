@@ -38,19 +38,23 @@ fi
 if [ x"${DEBUG}" != "x" ];then
     set -x
 fi
+
+is_container() {
+    echo  "$(cat -e /proc/1/environ |grep container=|wc -l|sed -e "s/ //g")"
+}
+
 filter_host_pids() {
-    if [ "x$(is_lxc)" != "x0" ];then
-        echo "${@}"
+    pids=""
+    if [ "x$(is_container)" != "x0" ];then
+        pids="${pids} $(echo "${@}")"
     else
         for pid in ${@};do
-            if [ "x$(grep -q lxc /proc/${pid}/cgroup 2>/dev/null;echo "${?}")" != "x0" ];then
-                 echo ${pid}
-             fi
+            if [ "x$(grep -q /lxc/ /proc/${pid}/cgroup 2>/dev/null;echo "${?}")" != "x0" ];then
+                pids="${pids} $(echo "${pid}")"
+            fi
          done
     fi
-}
-is_lxc() {
-    echo  "$(cat -e /proc/1/environ |grep container=lxc|wc -l|sed -e "s/ //g")"
+    echo "${pids}" | sed -e "s/\(^ \+\)\|\( \+$\)//g"
 }
 
 go_run_db_smart_backup() {
@@ -120,7 +124,7 @@ if [ x"${DEBUG}" != "x" ];then
 fi
 # try to run redi  backups if the config file is present
 CONF="${DB_SMARTBACKUPS_CONFS}/redis.conf"
-if [ x"$(filter_host_pids $(ps aux|grep redis-server|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
+if [ -e /var/lib/redis ] && [ x"$(filter_host_pids $(ps aux|grep redis-server|grep -v grep)|wc -w)" != "x0" ] &&  [ -e "${CONF}" ];then
     if [ "x${QUIET}" = "x" ];then
         echo "$__NAME__: Running backup for redis: $(redis-server --version|head -n1) (${CONF} $(which redis-server))"
     fi
