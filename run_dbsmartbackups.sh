@@ -80,7 +80,7 @@ if [ "x${PG_CONFS}" = "x" ];then
     PG_CONFS=/etc/postgresql.conf
 fi
 PORTS=$(egrep -h "^port\s=\s" ${PG_CONFS} 2>/dev/null|awk -F= '{print $2}'|awk '{print $1}'|sort -u)
-DB_SMARTBACKUPS_CONFS="/etc/dbsmartbackup"
+DB_SMARTBACKUPS_CONFS="${DB_SMARTBACKUPS_CONFS:-"/etc/dbsmartbackup"}"
 # try to run postgresql backup to any postgresql version if we found
 # a running socket in the standard debian location
 CONF="${DB_SMARTBACKUPS_CONFS}/postgresql.conf"
