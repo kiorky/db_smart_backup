@@ -26,7 +26,7 @@ generate_configuration_file() {
 
 #User to run dumps dump binaries as, defaults to logged in user
 #RUNAS=postgres
-#DB user to connect to the database with, defaults to $RUNAS
+#DB user to connect to the database with, defaults to \$RUNAS
 #DBUSER=postgres
 
 ######## Backup settings
@@ -85,7 +85,7 @@ generate_configuration_file() {
 # ES_USER="user"
 # ES_PASSWORD="secret"
 # path to snapshots (have to be added to path.repo in elasticsearch.yml)
-# ES_SNAPSHOTS_DIR="${ES_SNAPSHOTS_DIR:-${ES_TMP}/snapshots}"
+# ES_SNAPSHOTS_DIR="\${ES_SNAPSHOTS_DIR:-\${ES_TMP}/snapshots}"
 # elasticsearch daemon user
 
 ######### Postgresql
@@ -95,8 +95,8 @@ generate_configuration_file() {
 #PG_DUMPALL=""
 
 ######## slapd
-# SLAPCAT_ARGS="${SLAPCAT_ARGS:-""}"
-# SLAPD_DIR="${SLAPD_DIR:-/var/lib/ldap}"
+# SLAPCAT_ARGS="\${SLAPCAT_ARGS:-""}"
+# SLAPD_DIR="\${SLAPD_DIR:-/var/lib/ldap}"
 
 # OPT string for use with pg_dump ( see man pg_dump )
 #OPT="--create -Fc"
@@ -124,13 +124,13 @@ generate_configuration_file() {
 #MYSQL_USE_SSL=""
 
 ######## mongodb
-# MONGODB_PATH="${MONGODB_PATH:-"/var/lib/mongodb"}"
-# MONGODB_USER="${MONGODB_USER:-""}"
-# MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
-# MONGODB_ARGS="${MONGODB_ARGS:-""}"
+# MONGODB_PATH="\${MONGODB_PATH:-"/var/lib/mongodb"}"
+# MONGODB_USER="\${MONGODB_USER:-""}"
+# MONGODB_PASSWORD="\${MONGODB_PASSWORD:-"\${PASSWORD}"}"
+# MONGODB_ARGS="\${MONGODB_ARGS:-""}"
 
 ######## Redis
-# REDIS_PATH="${REDIS_PATH:-"/var/lib/redis"}"
+# REDIS_PATH="\${REDIS_PATH:-"/var/lib/redis"}"
 
 ######## Hooks (optionnal)
 # functions names which point to functions defined in your
@@ -896,8 +896,8 @@ set_vars() {
     MYSQLDUMP_NOROUTINES="${MYSQLDUMP_NOROUTINES:-}"
     # mongodb
     MONGODB_PATH="${MONGODB_PATH:-"/var/lib/mongodb"}"
-    MONGODB_USER="${MONGODB_USER:-""}"
-    MONGODB_PASSWORD="${MONGODB_PASSWORD:-""}"
+    MONGODB_USER="${MONGODB_USER:-"${DBUSER}"}"
+    MONGODB_PASSWORD="${MONGODB_PASSWORD:-"${PASSWORD}"}"
     MONGODB_ARGS="${MONGODB_ARGS:-""}"
     # slapd
     SLAPCAT_ARGS="${SLAPCAT_ARGS:-""}"
@@ -1294,8 +1294,8 @@ es_set_connection_vars() {
     if [ "x${ES_URI}" = "x" ];then
         export ES_URI="http://localhost:9200"
     fi
-    export ES_USER="${ES_USER}"
-    export ES_PASSWORD="${ES_PASSWORD}"
+    export ES_USER="${ES_USER:-${DBUSER}}"
+    export ES_PASSWORD="${ES_PASSWORD:-${PASSWORD}}"
 }
 
 es_set_vars() {
