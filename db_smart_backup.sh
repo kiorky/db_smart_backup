@@ -681,7 +681,7 @@ handle_exit() {
 
 do_trap() {
     debug "do_trap"
-	trap handle_exit      EXIT SIGHUP SIGINT SIGQUIT SIGTERM
+    trap handle_exit      EXIT SIGHUP SIGINT SIGQUIT SIGTERM
 }
 
 do_cleanup_orphans() {
@@ -1095,6 +1095,8 @@ mysql_set_connection_vars() {
     fi
     if [ -e "${MYSQL_UNIX_PORT}" ];then
         log "Using mysql socket: ${path}"
+    else
+        MYSQL_UNIX_PORT=
     fi
 }
 
@@ -1145,14 +1147,17 @@ mysql_common_args() {
     if [ x"${MYSQL_USE_SSL}" != "x" ];then
         args="${args} --ssl"
     fi
+    if [ x"${MYSQL_UNIX_PORT}" = "x" ];then
+        args="--host=$MYSQL_HOST --port=$MYSQL_TCP_PORT"
+    fi
     echo "${args}"
 }
 
 mysql_check_connectivity() {
     who="$(whoami)"
-    pgu="$(db_user)"
+    mysqlu="$(db_user)"
     echo "select 1"|mysql_ information_schema&> /dev/null
-    die_in_error "Cant connect to mysql server with ${pgu} as ${who}, did you configured \$RUNAS \$PASSWORD \$DBUSER in $DSB_CONF_FILE"
+    die_in_error "Cant connect to mysql server with ${mysqlu} as ${who}, did you configured \$RUNAS \$PASSWORD \$DBUSER in $DSB_CONF_FILE"
 }
 
 mysql_get_all_databases() {
