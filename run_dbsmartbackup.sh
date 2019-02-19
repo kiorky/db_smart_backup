@@ -12,19 +12,20 @@ RET=0
 for i in ${@};do
     if [ "x${i}" = "x--no-colors" ];then
         export NO_COLORS="1"
-    fi
-    if [ "x${i}" = "x--quiet" ];then
+        shift
+    elif [ "x${i}" = "x--quiet" ];then
         QUIET="1"
-    fi
-    if [ "x${i}" = "x--help" ] || \
+        shift
+    elif [ "x${i}" = "x--help" ] || \
        [ "x${i}" = "x--h" ]  \
         ;then
         HELP="1"
+        shift
     fi
 done
 __NAME__="RUN_DB_SMARTBACKUP"
 if [ "x${HELP}" != "x" ];then
-    echo "${0} [--quiet] [--no-colors]"
+    echo "${0} [--quiet] [--no-colors] [conf]"
     echo "Run all found db_smart_backups configurations"
     exit 1
 fi
