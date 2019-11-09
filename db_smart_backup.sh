@@ -1421,7 +1421,7 @@ es_dumpall() {
         if [ -e "${directory}" ];then
             cd "${directory}"
             tar cf "${2}" .\
-                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && curl_es "_snapshot/${esname}/dump"\
                 && cd "${cwd}"
             die_in_error "ES tar: ${2} / ${name} / ${esname} failed"
         else
@@ -1449,7 +1449,7 @@ es_dump() {
         if [ -e "${directory}" ];then
             cd "${directory}"
             tar cf "${2}" .\
-                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && curl_es "_snapshot/${esname}/dump"\
                 && cd "${cwd}"
             die_in_error "ESs tar: ${2} / ${name} / ${esname} failed"
         else
