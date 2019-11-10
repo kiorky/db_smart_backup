@@ -291,16 +291,16 @@ get_compressed_name() {
 set_compressor() {
     for comp in ${COMP} ${COMPS};do
         c=""
-        if [ x"${COMP}" = "xxz" ];then
+        if [ x"${comp}" = "xxz" ];then
             XZ="${XZ:-xz}"
             c="${XZ}"
-        elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
+        elif [ x"${comp}" = "xgz" ] || [ x"${comp}" = "xgzip" ];then
             GZIP="${GZIP:-gzip}"
             c="${GZIP}"
-        elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
+        elif [ x"${comp}" = "xbzip2" ] || [ x"${comp}" = "xbz2" ];then
             BZIP2="${BZIP2:-bzip2}"
             c="${BZIP2}"
-        elif [ x"${COMP}" = "xzstd" ] || [ x"${COMP}" = "xzst" ];then
+        elif [ x"${comp}" = "xzstd" ] || [ x"${comp}" = "xzst" ];then
             ZSTD="${ZSTD:-zstd}"
             c="${ZSTD}"
         else
@@ -308,11 +308,13 @@ set_compressor() {
         fi
         # test that the binary is present
         if [ x"$c" != "xnocomp" ] && [ -e "$(which "$c")" ];then
+            COMP=$c
             break
         else
             COMP="nocomp"
         fi
     done
+    export COMP=$COMP
 }
 
 comp_msg() {
@@ -918,7 +920,8 @@ set_vars() {
     post_backup_hook="${post_backup_hook-}"
 
     ######## Advanced options
-    COMPS="xz zstd bz2 gzip nocomp"
+    COMPS="${COMPS-"xz zstd bz2 gzip nocomp"}"
+    COMP="${COMP-"${COMPS}"}"
     GLOBAL_SUBDIR="__GLOBAL__"
     PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     DATE=`date +%Y-%m-%d` # Datestamp e.g 2002-09-21
