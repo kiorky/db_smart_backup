@@ -1403,14 +1403,14 @@ es_dumpall() {
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
     es_preparerepo "${name}"
-    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
+    ret=$(curl_es "_snapshot/${esname}/dump" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT)
     if [ "x$(echo "${ret}"|grep -q '"state":"SUCCESS"';echo ${?})" = "x0" ];then
         directory=$(es_getworkdir ${name})
         if [ -e "${directory}" ];then
             cd "${directory}"
             tar cf "${2}" .\
-                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && curl_es "_snapshot/${esname}/dump"\
                 && cd "${cwd}"
             die_in_error "ES tar: ${2} / ${name} / ${esname} failed"
         else
@@ -1427,7 +1427,7 @@ es_dump() {
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
     es_preparerepo "${name}"
-    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
+    ret=$(curl_es "_snapshot/${esname}/dump" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT -d '{
         "indices": "'"${name}"'",
         "ignore_unavailable": "true",
@@ -1438,7 +1438,7 @@ es_dump() {
         if [ -e "${directory}" ];then
             cd "${directory}"
             tar cf "${2}" .\
-                && curl_es "_snapshot/${esname}/dump?wait_for_completion=true"\
+                && curl_es "_snapshot/${esname}/dump"\
                 && cd "${cwd}"
             die_in_error "ESs tar: ${2} / ${name} / ${esname} failed"
         else
