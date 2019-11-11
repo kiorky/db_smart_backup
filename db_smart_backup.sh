@@ -1411,7 +1411,7 @@ es_dumpall() {
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
     es_preparerepo "${name}"
-    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
+    ret=$(curl_es "_snapshot/${esname}/dump" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT)
     if [ "x$(echo "${ret}"|grep -q '"state":"SUCCESS"';echo ${?})" = "x0" ];then
         directory=$(es_getworkdir ${name})
@@ -1435,7 +1435,7 @@ es_dump() {
     name="$(basename $(dirname $(dirname ${2})))"
     esname="$(es_getreponame ${name})"
     es_preparerepo "${name}"
-    ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XDELETE)
+    ret=$(curl_es "_snapshot/${esname}/dump" -XDELETE)
     ret=$(curl_es "_snapshot/${esname}/dump?wait_for_completion=true" -XPUT -d '{
         "indices": "'"${name}"'",
         "ignore_unavailable": "true",
