@@ -21,7 +21,7 @@ generate_configuration_file() {
 # set to 1 to deactivate colors (cron)
 #NO_COLOR=""
 
-# Choose Compression type. (gzip or bzip2 or xz)
+# Choose Compression type. (gzip or bzip2 or xz or zstd)
 #COMP=bzip2
 
 #User to run dumps dump binaries as, defaults to logged in user
@@ -281,6 +281,8 @@ get_compressed_name() {
         echo "${1}.gz";
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
         echo "${1}.bz2";
+    elif [ x"${COMP}" = "xzstd" ] || [ x"${COMP}" = "xzst" ];then
+        echo "${1}.zst";
     else
         echo "${1}";
     fi
@@ -298,6 +300,9 @@ set_compressor() {
         elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
             BZIP2="${BZIP2:-bzip2}"
             c="${BZIP2}"
+        elif [ x"${COMP}" = "xzstd" ] || [ x"${COMP}" = "xzst" ];then
+            ZSTD="${ZSTD:-zstd}"
+            c="${ZSTD}"
         else
             c="nocomp"
         fi
@@ -338,6 +343,9 @@ do_compression() {
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
         "${BZIP2}" -f -k -c "${name}" > "${zname}"
+        cleanup_uncompressed_dump_if_ok
+    elif [ x"${COMP}" = "xzstd" ] || [ x"${COMP}" = "xzst" ];then
+        "${ZSTD}" -f -c -q "${name}" > "${zname}"
         cleanup_uncompressed_dump_if_ok
     else
         /bin/true # noop
@@ -910,7 +918,7 @@ set_vars() {
     post_backup_hook="${post_backup_hook-}"
 
     ######## Advanced options
-    COMPS="xz bz2 gzip nocomp"
+    COMPS="xz zstd bz2 gzip nocomp"
     GLOBAL_SUBDIR="__GLOBAL__"
     PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     DATE=`date +%Y-%m-%d` # Datestamp e.g 2002-09-21
