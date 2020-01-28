@@ -1342,7 +1342,7 @@ curl_es() {
     if [ "x${ES_USER}" != "x" ];then
         es_args="-u ${ES_USER}:${ES_PASSWORD}"
     fi
-    curl -s "${@}" $es_args "${ES_URI}/${path}"
+    curl -H "Content-Type: application/json" -s "${@}" $es_args "${ES_URI}/${path}"
 }
 
 es_check_connectivity() {
@@ -1422,7 +1422,8 @@ es_dumpall() {
             cd "${directory}"
             tar cf "${2}" .\
                 && curl_es "_snapshot/${esname}/dump"\
-                && cd "${cwd}"
+                && cd "${cwd}"\
+                && echo
             die_in_error "ES tar: ${2} / ${name} / ${esname} failed"
         else
             die_in_error "ES tar: ${2} / ${name} / ${esname} backup workdir ${directory}  pb"
@@ -1450,7 +1451,8 @@ es_dump() {
             cd "${directory}"
             tar cf "${2}" .\
                 && curl_es "_snapshot/${esname}/dump"\
-                && cd "${cwd}"
+                && cd "${cwd}"\
+                && echo
             die_in_error "ESs tar: ${2} / ${name} / ${esname} failed"
         else
             die_in_error "ESs tar: ${2} / ${name} / ${esname} backup workdir ${directory} pb"
