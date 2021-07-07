@@ -975,6 +975,29 @@ set_vars() {
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
     fi
+    # ensure lower KEEP_LASTS than period retention is enforced
+    if [ "$KEEP_LASTS" -lt "$KEEP_DAYS" ];then
+        export KEEP_DAYS="$KEEP_LASTS"
+    fi
+    ###
+    # for monthes and week we are dictated by their values
+    # this may change, and we could activate the following code
+    # KEEP_LASTS_MONTHES=$(expr $KEEP_LASTS % 28)
+    # KEEP_LASTS_WEEKS=$(expr $KEEP_LASTS % 7)
+    # if [ $KEEP_LASTS_WEEKS = 0 ];then
+    #     export KEEP_LASTS_WEEKS=1
+    # fi
+    # if [ $KEEP_LASTS_MONTHES = 0 ];then
+    #     export KEEP_LASTS_MONTHS=1
+    # fi
+    # set -x
+    # if [ "$KEEP_LASTS_MONTHES" -lt "$KEEP_MONTHES" ];then
+    #     export KEEP_MONTHES="$KEEP_LASTS_MONTHES"
+    # fi
+    # if [ "$KEEP_LASTS_WEEKS" -lt "$KEEP_WEEKS" ];then
+    #     export KEEP_DAYS="$KEEP_LASTS_WEEKS"
+    # fi
+    ###
 }
 
 do_main() {
