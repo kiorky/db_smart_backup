@@ -1353,7 +1353,7 @@ es_set_vars() {
 curl_es() {
     path="${1}"
     shift
-    es_args=""
+    es_args="${ES_EXTRA_ARGS-}"
     curl="$(which curl 2>/dev/null)"
     jq="$(which jq 2>/dev/null)"
     if [ ! -f "${curl}" ];then
@@ -1363,15 +1363,20 @@ curl_es() {
         die "install jq"
     fi
     if [ "x${ES_USER}" != "x" ];then
-        es_args="-u ${ES_USER}:${ES_PASSWORD}"
+        es_args="${es_args} -u ${ES_USER}:${ES_PASSWORD}"
     fi
     curl -H "Content-Type: application/json" -s "${@}" $es_args "${ES_URI}/${path}"
 }
 
 es_check_connectivity() {
     curl_es 1>/dev/null || die_in_error "$ES_URI unreachable"
-    ES_TMP=$(curl_es "_nodes/_local?pretty"|grep '"work" :'|awk '{print $3}'|sed -e 's/\(^[^"]*"\)\|\("[^"]*$\)//g')
+    if [  "x$ES_SNAPSHOTS_DIR" = "x" ];then
+        ES_TMP=$(curl_es "_nodes/_local?pretty"|grep '"work" :'|awk '{print $3}'|sed -e 's/\(^[^"]*"\)\|\("[^"]*$\)//g')
+        if [ "x${ES_TMP}" = "x" ];then ES_SNAPSHOTS_DIR="${TOP_BACKUPDIR}/tmp";fi
+        if ! -e [ "x${ES_SNAPSHOTS_DIR}" ];then mkdir -p "${ES_SNAPSHOTS_DIR}";fi
+    fi
     ES_SNAPSHOTS_DIR="${ES_SNAPSHOTS_DIR:-${ES_TMP}/snapshots}"
+    export ES_SNAPSHOTS_DIR
     # set backup repository
 }
 
@@ -1411,21 +1416,21 @@ es_preparerepo() {
     curl_es "_snapshot/${esname}" -XDELETE >/dev/null 2>&1
     die_in_error "Directory API link removal problem for ${name} / ${esname} / ${directory}"
     ret=$(curl_es "_snapshot/${esname}" -XPUT\
-        -d '{"type": "fs", "settings": {"location": "'"$(basename ${directory})"'", "compress": false}}')
+        -d '{"type": "fs", "settings": {"location": "'"${directory}"'", "compress": false}}')
     if [ "x${ret}" != 'x{"acknowledged":true}' ];then
         echo "${ret}" >&2
         /bin/false
         die "Cannot create repo ${esname} for ${name} (${directory})"
     fi
     for i in $(seq 10);do
-        ret=$(curl_es "_snapshot/${esname}"|jq '.["'"${esname}"'"]["settings"]["location"]')
-        if [ "x${ret}" != 'x"'"${directory}"'"' ];then
+        ret=$(curl_es "_snapshot/${esname}"|jq -rc '.["'"${esname}"'"]["settings"]["location"]')
+        if [ "x$(basename ${ret})" != "x$(basename ${directory})" ];then
             sleep 1
         else
             break
         fi
     done
-    if [ "x${ret}" != 'x"'"$(basename ${directory})"'"' ];then
+    if [ "x$(basename ${ret})" != "x$(basename ${directory})" ];then
         echo $ret >&2;/bin/false
         die "Directory snapshot metadata problem for ${name} / ${directory}"
     fi
@@ -1491,4 +1496,4 @@ if [ x"${DB_SMART_BACKUP_AS_FUNCS}" = "x" ];then
     do_main "${@}"
 fi
 
-# vim:set ft=sh sts=4 ts=4  tw=0:
+# vim:set ft=sh sts=4 ts=4  tw=0 ai et:
