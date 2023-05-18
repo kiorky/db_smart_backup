@@ -1,1 +1,4 @@
 BACKUP_TYPE=es
+# ES_EXTRA_ARGS=-k
+# ES_USER=admin
+# ES_PASSWORD=admin
