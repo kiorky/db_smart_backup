@@ -890,7 +890,7 @@ set_vars() {
     PSQL="${PSQL:-"$(which psql 2>/dev/null)"}"
     PG_DUMP="${PG_DUMP:-"$(which pg_dump 2>/dev/null)"}"
     PG_DUMPALL="${PG_DUMPALL:-"$(which pg_dumpall 2>/dev/null)"}"
-    OPT="${OPT:-"--create -Fc"}"
+    OPT="${OPT:-"--create -Fc -Z0"}"
     OPTALL="${OPTALL:-"--globals-only"}"
 
     ######### MYSQL
