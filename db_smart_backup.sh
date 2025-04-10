@@ -318,19 +318,35 @@ set_compressor() {
 }
 
 comp_msg() {
-    sz="$(du -sh "$zname"|awk '{print $1}') "
-    s1="$(du -sb "$zname"|awk '{print $1}')"
-    s2="$(du -sb "$name"|awk '{print $1}')"
-    ratio=$(echo "$s1" "${s2}" | awk '{printf "%.2f \n", $1/$2}')
+    sz="";s1="";s2="";ratio=""
+    if [ -e "$zname" ];then
+        sz="$(du -sh "$zname"|awk '{print $1}') "
+        s1="$(du -sb "$zname"|awk '{print $1}')"
+    fi
+    if [ -e "$name" ];then
+        s2="$(du -sb "$name"|awk '{print $1}')"
+    fi
+    if [ -e "$zname" ] && [ -e "$name" ];then
+        ratio=$(echo "$s1" "${s2}" | awk '{printf "%.2f \n", $1/$2}')
+    fi
     log "${RED}${NORMAL}${YELLOW} ${COMP}${NORMAL}${RED} -> ${YELLOW}${zname}${NORMAL} ${RED}(${NORMAL}${YELLOW} ${sz} ${NORMAL}${RED}/${NORMAL} ${YELLOW}${ratio}${NORMAL}${RED})${NORMAL}"
 }
 
 
 cleanup_uncompressed_dump_if_ok() {
     comp_msg
-    if [ x"$?" = x"0" ];then
-        rm -f "$name"
+    dumpfiles=""
+    if [ x"$?" != x"0" ];then
+        dumpfiles="${zname}"
     fi
+    if [ x"$?" = x"0" ];then
+        if [ "${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            dumpfiles="${name}"
+        fi
+    fi
+    for i in $dumpfiles;do
+        if [ -e "$i" ];then rm -f "$i";fi
+    done
 }
 
 do_compression() {
@@ -338,21 +354,37 @@ do_compression() {
     name="${1}"
     zname="${2:-$(get_compressed_name ${1})}"
     if [ x"${COMP}" = "xxz" ];then
-        "${XZ}" --stdout -f -k "${name}" > "${zname}"
+        if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            "${XZ}" --stdout -f -k "${name}" > "${zname}"
+        else
+            "${XZ}" --stdout -f -k > "${zname}"
+        fi
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xgz" ] || [ x"${COMP}" = "xgzip" ];then
-        "${GZIP}" -f -c "${name}" > "${zname}"
+        if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            "${GZIP}" -f -c "${name}" > "${zname}"
+        else
+            "${GZIP}" -f -c > "${zname}"
+        fi
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xbzip2" ] || [ x"${COMP}" = "xbz2" ];then
-        "${BZIP2}" -f -k -c "${name}" > "${zname}"
+        if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            "${BZIP2}" -f -k -c "${name}" > "${zname}"
+        else
+            "${BZIP2}" -f -k -c > "${zname}"
+        fi
         cleanup_uncompressed_dump_if_ok
     elif [ x"${COMP}" = "xzstd" ] || [ x"${COMP}" = "xzst" ];then
-        "${ZSTD}" -f -c -q "${name}" > "${zname}"
+        if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            "${ZSTD}" -f -c -q "${name}" > "${zname}"
+        else
+            "${ZSTD}" -f -c -q > "${zname}"
+        fi
         cleanup_uncompressed_dump_if_ok
     else
         /bin/true # noop
     fi
-    if [ -e "${zname}" ] && [ x"${zname}" != "x${name}" ];then
+    if ( [ -e "${zname}" ] && [ x"${zname}" != "x${name}" ] ) || [ "${PIPED_BACKUP_COMPRESSION}" = "x1" ];then
         COMPRESSED_NAME="${zname}"
     else
         if [ -e "${name}" ];then
@@ -448,6 +480,14 @@ dummy_for_tests() {
     dummy_callee_for_tests
 }
 
+
+remove_file() {
+    if [ -e $i ];then rm -f "$i";fi
+}
+remove_backup_status_files() {
+    for i in "$statusfile" "$statusfile.c";do remove_file "i";done
+}
+
 do_db_backup_() {
     LAST_BACKUP_STATUS=""
     db="${1}"
@@ -455,17 +495,34 @@ do_db_backup_() {
     create_db_directories "${db}"
     real_filename="$(get_backupdir)/${db}/dumps/${db}_${FDATE}.${BACKUP_EXT}"
     zreal_filename="$(get_compressed_name "${real_filename}")"
+    statusfile=$(mktemp)
+    remove_backup_status_files
+    if [ -e $statusfile ];then rm -f $statusfile;fi
     adb="${YELLOW}${db}${NORMAL} "
     if [ x"${db}" = x"${GLOBAL_SUBDIR}" ];then
         adb=""
     fi
     log "Dumping database ${adb}${RED}to maybe uncompressed dump: ${YELLOW}${real_filename}${NORMAL}"
-    $fun_ "${db}" "${real_filename}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" = "x1" ];then
+        # ensure backup + compression is atomic with the absence of +o pipefail in old posix shells
+        ( $fun_ "${db}" "${real_filename}" && touch "$statusfile" ) \
+            | ( do_compression "${real_filename}" "${zreal_filename}" && touch "$statusfile.c" )
+
+        if [ "x$?" != "x0" ] || ! ( [ -e "$statusfile" ] && [ -e "$statusfile.c" ] );then
+            remove_backup_status_files
+            LAST_BACKUP_STATUS="failure"
+            log "${CYAN}    Backup of ${db} failed !!!${NORMAL}"
+        fi
+    else
+        $fun_ "${db}" "${real_filename}"
+    fi
     if [ x"$?" != "x0" ];then
         LAST_BACKUP_STATUS="failure"
         log "${CYAN}    Backup of ${db} failed !!!${NORMAL}"
     else
-        do_compression "${real_filename}" "${zreal_filename}"
+        if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+            do_compression "${real_filename}" "${zreal_filename}"
+        fi
         link_into_dirs "${db}" "${real_filename}"
     fi
 }
@@ -939,11 +996,14 @@ set_vars() {
     DSB_RETURN_CODE=""
     DSB_GLOBAL_BACKUP_FAILED="3"
     DSB_BACKUP_FAILED="4"
-
     # source conf file if any
     if [ -e "${DSB_CONF_FILE}" ];then
         . "${DSB_CONF_FILE}"
     fi
+
+    DEFAULT_PIPED_BACKUP_COMPRESSION="$(if ( echo $BACKUP_TYPE|grep -Eq "^ldap|slapd|mysql|post" );then echo 1;fi)"
+    export PIPED_BACKUP_COMPRESSION="${PIPED_BACKUP_COMPRESSION-${DEFAULT_PIPED_BACKUP_COMPRESSION}}"
+
     activate_IO_redirection
     set_compressor
 
@@ -1090,11 +1150,19 @@ postgresql_get_all_databases() {
 }
 
 postgresql_dumpall() {
-    pg_dumpall_ --username="$(db_user)" $OPTALL > "${2}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+        pg_dumpall_ --username="$(db_user)" $OPTALL > "${2}"
+    else
+        pg_dumpall_ --username="$(db_user)" $OPTALL
+    fi
 }
 
 postgresql_dump() {
-    pg_dump_ --username="$(db_user)" $OPT "${1}" > "${2}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+        pg_dump_ --username="$(db_user)" $OPT "${1}" > "${2}"
+    else
+        pg_dump_ --username="$(db_user)" $OPT "${1}"
+    fi
 }
 
 #################### MYSQL
@@ -1202,11 +1270,19 @@ mysql_get_all_databases() {
 }
 
 mysql_dumpall() {
-    mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+        mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1 > "${2}"
+    else
+        mysqldump_ ${MYSQLDUMP_ALL_OPTS} 2>&1
+    fi
 }
 
 mysql_dump() {
-    mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+        mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}" > "${2}"
+    else
+        mysqldump_ ${MYSQLDUMP_OPTS} -B "${1}"
+    fi
 }
 
 
@@ -1320,7 +1396,11 @@ slapd_dumpall() {
     if [ ! -e "${BCK_DIR}" ];then
         mkdir -p "${BCK_DIR}"
     fi
-    slapcat ${SLAPCAT_ARGS} > "${2}"
+    if [ "x${PIPED_BACKUP_COMPRESSION}" != "x1" ];then
+        slapcat ${SLAPCAT_ARGS} > "${2}"
+    else
+        slapcat ${SLAPCAT_ARGS}
+    fi
     die_in_error "slapd $2 dump failed"
 }
 
